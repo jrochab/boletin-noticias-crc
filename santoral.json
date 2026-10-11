@@ -1,0 +1,480 @@
+{
+ "01-01": [
+  [
+   "Santa María, Madre de Dios",
+   "Solemnidad"
+  ]
+ ],
+ "01-17": [
+  [
+   "San Antonio Abad",
+   "Abad"
+  ]
+ ],
+ "01-21": [
+  [
+   "Santa Inés",
+   "Virgen y mártir"
+  ]
+ ],
+ "01-24": [
+  [
+   "San Francisco de Sales",
+   "Obispo y doctor de la Iglesia"
+  ]
+ ],
+ "01-25": [
+  [
+   "Conversión de San Pablo",
+   "Fiesta"
+  ]
+ ],
+ "01-28": [
+  [
+   "Santo Tomás de Aquino",
+   "Presbítero y doctor de la Iglesia"
+  ]
+ ],
+ "01-31": [
+  [
+   "San Juan Bosco",
+   "Presbítero"
+  ]
+ ],
+ "02-02": [
+  [
+   "Presentación del Señor",
+   "Fiesta"
+  ]
+ ],
+ "02-03": [
+  [
+   "San Blas",
+   "Obispo y mártir"
+  ]
+ ],
+ "02-11": [
+  [
+   "Nuestra Señora de Lourdes",
+   "Memoria"
+  ]
+ ],
+ "02-22": [
+  [
+   "Cátedra de San Pedro",
+   "Fiesta"
+  ]
+ ],
+ "03-17": [
+  [
+   "San Patricio",
+   "Obispo"
+  ]
+ ],
+ "03-19": [
+  [
+   "San José",
+   "Esposo de la Virgen María"
+  ]
+ ],
+ "03-25": [
+  [
+   "Anunciación del Señor",
+   "Solemnidad"
+  ]
+ ],
+ "04-23": [
+  [
+   "San Jorge",
+   "Mártir"
+  ]
+ ],
+ "04-25": [
+  [
+   "San Marcos",
+   "Evangelista"
+  ]
+ ],
+ "04-29": [
+  [
+   "Santa Catalina de Siena",
+   "Virgen y doctora de la Iglesia"
+  ]
+ ],
+ "05-01": [
+  [
+   "San José Obrero",
+   "Memoria"
+  ]
+ ],
+ "05-03": [
+  [
+   "Santos Felipe y Santiago",
+   "Apóstoles"
+  ]
+ ],
+ "05-14": [
+  [
+   "San Matías",
+   "Apóstol"
+  ]
+ ],
+ "05-15": [
+  [
+   "San Isidro Labrador",
+   "Patrono de los agricultores"
+  ]
+ ],
+ "05-31": [
+  [
+   "Visitación de la Virgen María",
+   "Fiesta"
+  ]
+ ],
+ "06-13": [
+  [
+   "San Antonio de Padua",
+   "Presbítero y doctor de la Iglesia"
+  ]
+ ],
+ "06-24": [
+  [
+   "Natividad de San Juan Bautista",
+   "Solemnidad"
+  ]
+ ],
+ "06-29": [
+  [
+   "San Pedro y San Pablo",
+   "Apóstoles"
+  ]
+ ],
+ "07-03": [
+  [
+   "Santo Tomás",
+   "Apóstol"
+  ]
+ ],
+ "07-11": [
+  [
+   "San Benito",
+   "Abad, patrono de Europa"
+  ]
+ ],
+ "07-16": [
+  [
+   "Nuestra Señora del Carmen",
+   "Memoria"
+  ]
+ ],
+ "07-22": [
+  [
+   "Santa María Magdalena",
+   "Fiesta"
+  ]
+ ],
+ "07-25": [
+  [
+   "Santiago",
+   "Apóstol"
+  ]
+ ],
+ "07-26": [
+  [
+   "Santos Joaquín y Ana",
+   "Padres de la Virgen María"
+  ]
+ ],
+ "07-31": [
+  [
+   "San Ignacio de Loyola",
+   "Presbítero"
+  ]
+ ],
+ "08-02": [
+  [
+   "Nuestra Señora de los Ángeles",
+   "Patrona de Costa Rica"
+  ]
+ ],
+ "08-04": [
+  [
+   "San Juan María Vianney",
+   "Presbítero"
+  ]
+ ],
+ "08-06": [
+  [
+   "Transfiguración del Señor",
+   "Fiesta"
+  ]
+ ],
+ "08-10": [
+  [
+   "San Lorenzo",
+   "Diácono y mártir"
+  ]
+ ],
+ "08-15": [
+  [
+   "Asunción de la Virgen María",
+   "Solemnidad"
+  ]
+ ],
+ "08-22": [
+  [
+   "Santa María Reina",
+   "Memoria"
+  ]
+ ],
+ "08-24": [
+  [
+   "San Bartolomé",
+   "Apóstol"
+  ]
+ ],
+ "08-28": [
+  [
+   "San Agustín",
+   "Obispo y doctor de la Iglesia"
+  ]
+ ],
+ "08-29": [
+  [
+   "Martirio de San Juan Bautista",
+   "Memoria"
+  ]
+ ],
+ "09-08": [
+  [
+   "Natividad de la Virgen María",
+   "Fiesta"
+  ]
+ ],
+ "09-14": [
+  [
+   "Exaltación de la Santa Cruz",
+   "Fiesta"
+  ]
+ ],
+ "09-15": [
+  [
+   "Nuestra Señora de los Dolores",
+   "Memoria"
+  ]
+ ],
+ "09-21": [
+  [
+   "San Mateo",
+   "Apóstol y evangelista"
+  ]
+ ],
+ "09-29": [
+  [
+   "Santos Miguel, Gabriel y Rafael",
+   "Arcángeles"
+  ]
+ ],
+ "09-30": [
+  [
+   "San Jerónimo",
+   "Presbítero y doctor de la Iglesia"
+  ]
+ ],
+ "10-01": [
+  [
+   "Santa Teresa del Niño Jesús",
+   "Virgen y doctora de la Iglesia"
+  ]
+ ],
+ "10-02": [
+  [
+   "Santos Ángeles Custodios",
+   "Memoria"
+  ]
+ ],
+ "10-04": [
+  [
+   "San Francisco de Asís",
+   "Fundador"
+  ]
+ ],
+ "10-07": [
+  [
+   "Nuestra Señora del Rosario",
+   "Memoria"
+  ]
+ ],
+ "10-10": [
+  [
+   "Santo Tomás de Villanueva",
+   "Obispo"
+  ]
+ ],
+ "10-11": [
+  [
+   "San Juan XXIII",
+   "Papa"
+  ],
+  [
+   "Santa María Soledad Torres Acosta",
+   "Fundadora"
+  ]
+ ],
+ "10-12": [
+  [
+   "Nuestra Señora del Pilar",
+   "Advocación mariana"
+  ]
+ ],
+ "10-13": [
+  [
+   "San Eduardo",
+   "Rey"
+  ]
+ ],
+ "10-14": [
+  [
+   "San Calixto I",
+   "Papa y mártir"
+  ]
+ ],
+ "10-15": [
+  [
+   "Santa Teresa de Ávila",
+   "Virgen y doctora de la Iglesia"
+  ]
+ ],
+ "10-17": [
+  [
+   "San Ignacio de Antioquía",
+   "Obispo y mártir"
+  ]
+ ],
+ "10-18": [
+  [
+   "San Lucas",
+   "Evangelista"
+  ]
+ ],
+ "10-22": [
+  [
+   "San Juan Pablo II",
+   "Papa"
+  ]
+ ],
+ "10-23": [
+  [
+   "San Juan de Capistrano",
+   "Presbítero"
+  ]
+ ],
+ "10-28": [
+  [
+   "Santos Simón y Judas Tadeo",
+   "Apóstoles"
+  ]
+ ],
+ "11-01": [
+  [
+   "Todos los Santos",
+   "Solemnidad"
+  ]
+ ],
+ "11-02": [
+  [
+   "Conmemoración de los Fieles Difuntos",
+   "Día de los difuntos"
+  ]
+ ],
+ "11-04": [
+  [
+   "San Carlos Borromeo",
+   "Obispo"
+  ]
+ ],
+ "11-11": [
+  [
+   "San Martín de Tours",
+   "Obispo"
+  ]
+ ],
+ "11-21": [
+  [
+   "Presentación de la Virgen María",
+   "Memoria"
+  ]
+ ],
+ "11-22": [
+  [
+   "Santa Cecilia",
+   "Virgen y mártir"
+  ]
+ ],
+ "11-30": [
+  [
+   "San Andrés",
+   "Apóstol"
+  ]
+ ],
+ "12-03": [
+  [
+   "San Francisco Javier",
+   "Presbítero"
+  ]
+ ],
+ "12-06": [
+  [
+   "San Nicolás",
+   "Obispo"
+  ]
+ ],
+ "12-08": [
+  [
+   "Inmaculada Concepción de la Virgen María",
+   "Solemnidad"
+  ]
+ ],
+ "12-12": [
+  [
+   "Nuestra Señora de Guadalupe",
+   "Patrona de América"
+  ]
+ ],
+ "12-13": [
+  [
+   "Santa Lucía",
+   "Virgen y mártir"
+  ]
+ ],
+ "12-14": [
+  [
+   "San Juan de la Cruz",
+   "Presbítero y doctor de la Iglesia"
+  ]
+ ],
+ "12-25": [
+  [
+   "Natividad del Señor",
+   "Solemnidad"
+  ]
+ ],
+ "12-26": [
+  [
+   "San Esteban",
+   "Primer mártir"
+  ]
+ ],
+ "12-27": [
+  [
+   "San Juan",
+   "Apóstol y evangelista"
+  ]
+ ],
+ "12-28": [
+  [
+   "Santos Inocentes",
+   "Mártires"
+  ]
+ ]
+}
