@@ -178,17 +178,84 @@ def reunir(sec, ahora, vistos):
 # ---------------------------------------------------------------------------
 # Evangelio, santoral y mensaje
 # ---------------------------------------------------------------------------
+LIBROS = {"Mt": "Mateo", "Mc": "Marcos", "Lc": "Lucas", "Jn": "Juan"}
+
+
+def _verso(v):
+    return re.sub(r"\s+", "", v).replace("–", "-").replace(".", "")
+
+
+def ref_evangelio(txt):
+    """Busca la cita del Evangelio en el texto de una página. Devuelve p. ej. 'Mateo 22, 1-14'."""
+    # "Evangelio del domingo 11 de octubre de 2026 (Mt 22, 1-14)"
+    m = re.search(r"Evangelio[^()]{0,90}\(\s*(Mt|Mc|Lc|Jn)\s*(\d{1,2})\s*[,:]\s*([\d\-–\.y ]{1,24}?)\s*\)", txt)
+    if m:
+        return f"{LIBROS[m.group(1)]} {m.group(2)}, {_verso(m.group(3))}"
+    # "Evangelio Lucas 11:42-46" / "Evangelio según san Mateo 22, 1-14"
+    m = re.search(r"Evangelio\s+(?:seg[úu]n\s+(?:san\s+)?)?(Mateo|Marcos|Lucas|Juan)\s+(\d{1,2})\s*[,:]\s*(\d{1,2}[a-d]?(?:\s*[-–]\s*\d{1,2}[a-d]?)?)", txt, re.I)
+    if m:
+        return f"{m.group(1).capitalize()} {m.group(2)}, {_verso(m.group(3))}"
+    # "Evangelio Mt 22, 1-14"
+    m = re.search(r"Evangelio\s+(Mt|Mc|Lc|Jn)\s*(\d{1,2})\s*[,:]\s*(\d{1,2}[a-d]?(?:\s*[-–]\s*\d{1,2}[a-d]?)?)", txt)
+    if m:
+        return f"{LIBROS[m.group(1)]} {m.group(2)}, {_verso(m.group(3))}"
+    return None
+
+
+def _meta(crudo, nombre):
+    """Contenido de <meta name|property="nombre" content="...">."""
+    for tag in re.findall(r"<meta\b[^>]*>", crudo, re.I):
+        attrs = {k.lower(): v for k, v in re.findall(r'([\w:-]+)\s*=\s*["\']([^"\']*)["\']', tag)}
+        if attrs.get("name") == nombre or attrs.get("property") == nombre:
+            return limpiar(attrs.get("content", ""))
+    return None
+
+
+def _dominicos(d, crudo):
+    """Datos de dominicos.org (página 'hoy'). Solo vale si la página es de la fecha pedida."""
+    desc = _meta(crudo, "description") or ""
+    m = re.match(r"\s*(\d{1,2})\s+(\w+)\.?\s+(\d{4})\s*,\s*(.+?)\.\s+Evangelio del d", desc)
+    if not m:
+        return None
+    if int(m.group(1)) != d.day or int(m.group(3)) != d.year or not MESES[d.month - 1].startswith(m.group(2).lower()[:3]):
+        print("  ! Dominicos: la página 'hoy' no es de la fecha pedida; se ignora")
+        return None
+    ref = ref_evangelio(re.sub(r"Evangelio del d[ií]a seg[úu]n (?:san )?", "Evangelio ", desc))
+    dia = m.group(4).strip()
+    lema = _meta(crudo, "og:title")
+    video = re.search(r"https://www\.youtube\.com/watch\?v=[\w-]{6,20}", crudo)
+    return {"ref": ref, "dia": dia[:1].upper() + dia[1:], "lema": lema, "video": video.group(0) if video else None}
+
+
 def evangelio(d):
-    url = f"https://www.ewtn.com/es/catolicismo/lecturas/{d:%Y-%m-%d}"
-    ref = None
+    ymd = f"{d:%Y-%m-%d}"
+    dmy = f"{d.day}-{d.month}-{d.year}"
+    ruta = "homilia" if d.weekday() == 6 else "evangelio-del-dia"
+    dominicos_url = f"https://www.dominicos.org/predicacion/{ruta}/{dmy}/"
+    enlaces = [
+        ("Dominicos", dominicos_url),
+        ("Corazón de Paúl", f"https://www.corazondepaul.org/lectio/{ymd}/"),
+        ("ACI Prensa", f"https://www.aciprensa.com/calendario/{ymd}"),
+        ("EWTN", f"https://www.ewtn.com/es/catolicismo/lecturas/{ymd}"),
+    ]
+    res = {"url": enlaces[-1][1], "ref": None, "dia": None, "lema": None, "video": None, "enlaces": enlaces}
     try:
-        txt = limpiar(fetch(url).decode("utf-8", "ignore"))
-        m = re.search(r"Evangelio\s+((?:[1-3]\s)?[A-ZÁÉÍÓÚ][A-Za-záéíóúñ]+\s\d+[:,]\s?\d+(?:[-–]\d+)?)", txt)
-        if m:
-            ref = m.group(1).replace(":", ", ")
+        crudo = fetch("https://www.dominicos.org/predicacion/evangelio-del-dia/hoy/").decode("utf-8", "ignore")
+        dom = _dominicos(d, crudo)
+        print(f"  Evangelio (Dominicos): {(dom or {}).get('ref') or 'sin datos'}")
+        if dom:
+            res.update({k: v for k, v in dom.items() if v})
     except Exception as e:
-        print(f"  ! Evangelio: {e}", file=sys.stderr)
-    return {"url": url, "ref": ref}
+        print(f"  ! Evangelio (Dominicos): {e}", file=sys.stderr)
+    for nombre, url in enlaces[1:]:
+        if res["ref"]:
+            break
+        try:
+            res["ref"] = ref_evangelio(limpiar(fetch(url).decode("utf-8", "ignore")))
+            print(f"  Evangelio ({nombre}): {res['ref'] or 'sin cita reconocida'}")
+        except Exception as e:
+            print(f"  ! Evangelio ({nombre}): {e}", file=sys.stderr)
+    return res
 
 
 def santoral(d):
@@ -500,9 +567,18 @@ def pagina_edicion(d, secciones, eva, santos, msg, clima=None):
         h += "</section>\n"
         if s["id"] == "costa-rica":
             h += tiempo_html(clima)
-    ref = eva["ref"] or "Lectura de hoy"
-    h += f'<section id="evangelio"><h2 class="sec">Evangelio del día</h2><div class="item"><h3>{esc(ref)}</h3>'
-    h += f'<p class="src">Lea el texto completo del día: <a href="{esc(eva["url"])}">EWTN</a></p></div></section>\n'
+    ref = eva["ref"] or "El Evangelio de hoy"
+    enlaces = " · ".join(f'<a href="{esc(u)}">{esc(n)}</a>' for n, u in eva.get("enlaces", [("EWTN", eva["url"])]))
+    h += '<section id="evangelio"><h2 class="sec">Evangelio del día</h2><div class="item">'
+    if eva.get("dia"):
+        h += f'<span class="tag">{esc(eva["dia"])}</span>'
+    h += f'<h3>{esc(ref)}</h3>'
+    if eva.get("lema"):
+        h += f'<p>Tema de la homilía: «{esc(eva["lema"])}»</p>'
+    h += f'<p class="src">Lea el Evangelio completo: {enlaces}</p>'
+    if eva.get("video"):
+        h += f'<p class="src"><a href="{esc(eva["video"])}">Ver el Evangelio de hoy en vídeo</a></p>'
+    h += '</div></section>\n'
     h += f'<section id="santoral"><div class="sant-head">{ICONO_SANTORAL}<h2 class="sec">Santoral del {d.day} de {MESES[d.month - 1]}</h2></div>'
     if santos:
         h += '<ul class="saints">' + "".join(f'<li><strong>{esc(n)}</strong><span>{esc(r)}</span></li>' for n, r in santos) + '</ul>'
@@ -535,7 +611,7 @@ def pagina_indice(eds):
     return h
 
 
-def aviso(d, secciones, url, clima=None):
+def aviso(d, secciones, url, clima=None, eva=None):
     """Texto del mensaje de Telegram (formato HTML de Telegram)."""
     lin = [f"<b>{NOMBRE} 🇨🇷</b>", fecha_larga(d), ""]
     for sid in ("costa-rica", "deportes", "internacional"):
@@ -548,6 +624,8 @@ def aviso(d, secciones, url, clima=None):
     av = (clima or {}).get("aviso")
     if av and av.get("reciente"):
         lin.append("⚠️ Aviso del IMN: " + html.escape(recortar(av["titulo"], 100), quote=False))
+    if eva and eva.get("ref"):
+        lin.append("📖 Evangelio: " + html.escape(eva["ref"], quote=False))
     lin += ["", f'<a href="{url}">Leer la edición completa</a>']
     return "\n".join(lin)
 
@@ -580,7 +658,7 @@ def main():
     destino.write_text(pagina_edicion(hoy, secciones, eva, santos, msg, clima), encoding="utf-8")
     if os.environ.get("AVISO_PATH"):
         Path(os.environ["AVISO_PATH"]).write_text(
-            aviso(hoy, secciones, f"{BASE}/ediciones-{ymd}.html", clima), encoding="utf-8")
+            aviso(hoy, secciones, f"{BASE}/ediciones-{ymd}.html", clima, eva), encoding="utf-8")
     sub = f"{NOMBRE} · {hoy.day} de {MESES[hoy.month - 1]} de {hoy.year}"
     imagen_og(ROOT / f"ediciones-{ymd}-og.jpg", msg, sub)
     imagen_og(ROOT / "og-image.jpg", msg, sub)
