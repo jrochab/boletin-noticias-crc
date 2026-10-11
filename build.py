@@ -398,7 +398,7 @@ def cabecera(titulo, desc, url, img, tipo):
 
 
 def item_html(it):
-    s = f'<div class="item"><span class="tag">{esc(it["fuente"])}</span><h3>{esc(it["titulo"])}</h3>'
+        s = f'<div class="item"><span class="tag">{esc(it["fuente"])}</span><h3><a href="{esc(it["link"])}" style="color:inherit">{esc(it["titulo"])}</a></h3>'
     if it["resumen"]:
         s += f'<p>{esc(it["resumen"])}</p>'
     s += f'<p class="src">Nota completa: <a href="{esc(it["link"])}">{esc(it["fuente"])}</a></p></div>'
