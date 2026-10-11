@@ -1,7 +1,7 @@
 {
   "DAYS_LIMIT": 30,
   "REQUEST_TIMEOUT": 20,
-  "TIMEZONE_STR": "Europe/Rome",
+  "TIMEZONE_STR": "America/Costa_Rica",,
   "URL": "https://github.com/jrochab/boletin-noticias-crc/",
   "PAGE_TITLE": "Boletín de Noticias CRC",
   "FOOTER_TEXT": "Feed per temi di gamification. Parte del progetto \"Questa è gamification!\" di Giacomo D'angelo.",
