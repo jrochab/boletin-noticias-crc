@@ -71,6 +71,7 @@ jobs:
           AVISO_PATH: ${{ runner.temp }}/aviso.html
         run: |
           if [ -z "$TG_TOKEN" ] || [ -z "$TG_CHAT" ]; then echo "Telegram no configurado; se omite."; exit 0; fi
+          if [ ! -s "$AVISO_PATH" ]; then echo "No se creó una edición nueva; no se envía aviso."; exit 0; fi
           FECHA=$(TZ=America/Costa_Rica date +%F)
           curl -sS --fail-with-body -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendPhoto" \
             --form-string chat_id="$TG_CHAT" --form-string parse_mode=HTML \
