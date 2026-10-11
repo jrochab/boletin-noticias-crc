@@ -1,0 +1,187 @@
+name: Actualizar Boletin Zona Mixta CR
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Clonar repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar entorno de Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Generar contenido y actualizar boletin
+        run: |
+          python -c "
+          import datetime
+          
+          hoy = datetime.datetime.now().strftime('%A, %d de %B de %Y')
+          
+          html = f'''<!DOCTYPE html>
+          <html lang=\\'es\\'>
+          <head>
+              <meta charset=\\'UTF-8\\'>
+              <meta name=\\'viewport\\' content=\\'width=device-width, initial-scale=1.0\\'>
+              <title>Zona Mixta CR — Boletín Diario | {hoy}</title>
+              <meta property=\\'og:title\\' content=\\'ZONA MIXTA CR — Boletín Diario\\'>
+              <meta property=\\'og:description\\' content=\\'Edición automatizada de hoy con noticias de Costa Rica, deportes y tecnología.\\'>
+              <meta property=\\'og:image\\' content=\\'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1200&q=80\\'>
+              <meta property=\\'og:type\\' content=\\'article\\'>
+              <style>
+                  :root {{
+                      --bg-color: #0f1117;
+                      --card-bg: #1a1d24;
+                      --text-main: #f3f4f6;
+                      --text-muted: #9ca3af;
+                      --accent: #3b82f6;
+                      --border: #2d3139;
+                      --tag-bg: #22262e;
+                  }}
+                  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+                  body {{
+                      font-family: -apple-system, BlinkMacSystemFont, \\'Segoe UI\\', Roboto, Helvetica, Arial, sans-serif;
+                      background-color: var(--bg-color);
+                      color: var(--text-main);
+                      line-height: 1.6;
+                      padding: 20px;
+                      display: flex;
+                      justify-content: center;
+                  }}
+                  .wrapper {{ width: 100%; max-width: 720px; }}
+                  header {{
+                      display: flex;
+                      justify-content: space-between;
+                      align-items: center;
+                      border-bottom: 1px solid var(--border);
+                      padding-bottom: 16px;
+                      margin-bottom: 24px;
+                  }}
+                  .brand {{ font-size: 18px; font-weight: 800; color: #ffffff; }}
+                  .brand span {{ color: var(--accent); }}
+                  .date-badge {{
+                      font-size: 12px;
+                      background: var(--tag-bg);
+                      border: 1px solid var(--border);
+                      padding: 6px 12px;
+                      border-radius: 20px;
+                      color: var(--text-muted);
+                  }}
+                  .card {{
+                      background: var(--card-bg);
+                      border: 1px solid var(--border);
+                      border-radius: 12px;
+                      padding: 20px;
+                      margin-bottom: 20px;
+                      box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+                      overflow: hidden;
+                  }}
+                  .motivation-card {{ padding: 0; border: 1px solid var(--border); }}
+                  .motivation-image {{ width: 100%; height: 180px; object-fit: cover; display: block; }}
+                  .motivation-content {{
+                      padding: 20px;
+                      background: linear-gradient(180deg, rgba(26,29,36,0.95) 0%, rgba(26,29,36,1) 100%);
+                      border-left: 4px solid var(--accent);
+                      font-style: italic;
+                      font-size: 14px;
+                      color: #d1d5db;
+                  }}
+                  .section-title {{
+                      font-size: 13px;
+                      text-transform: uppercase;
+                      letter-spacing: 1.5px;
+                      color: var(--accent);
+                      font-weight: 700;
+                      margin-bottom: 14px;
+                  }}
+                  .news-grid {{ display: flex; flex-direction: column; gap: 12px; }}
+                  .news-item {{
+                      background: rgba(255, 255, 255, 0.02);
+                      border: 1px solid var(--border);
+                      border-radius: 8px;
+                      padding: 12px 16px;
+                      font-size: 14px;
+                      color: #e5e7eb;
+                  }}
+                  .news-item strong {{ color: #ffffff; display: block; margin-bottom: 4px; }}
+                  .efemerides-box {{
+                      font-size: 13px;
+                      color: var(--text-muted);
+                      background: var(--tag-bg);
+                      padding: 12px 16px;
+                      border-radius: 8px;
+                      border: 1px solid var(--border);
+                      margin-bottom: 20px;
+                  }}
+                  footer {{
+                      text-align: center;
+                      font-size: 12px;
+                      color: var(--text-muted);
+                      margin-top: 30px;
+                      border-top: 1px solid var(--border);
+                      padding-top: 16px;
+                  }}
+              </style>
+          </head>
+          <body>
+              <div class=\"wrapper\">
+                  <header>
+                      <div class=\"brand\">ZONA MIXTA <span>CR</span></div>
+                      <div class=\"date-badge\">{hoy}</div>
+                  </header>
+                  <div class=\"card motivation-card\">
+                      <img src=\"https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1200&q=80\" alt=\"Paisaje del día\" class=\"motivation-image\">
+                      <div class=\"motivation-content\">
+                          ✨ \"La constancia es la base del éxito diario. Cada día trae una nueva oportunidad para destacar.\"
+                      </div>
+                  </div>
+                  <div class=\"efemerides-box\">
+                      🗓️ <strong>Actualización Automática Diaria</strong> • Edición en vivo sincronizada en la nube.
+                  </div>
+                  <div class=\"card\">
+                      <div class=\"section-title\">🇨🇷 Costa Rica</div>
+                      <div class=\"news-grid\">
+                          <div class=\"news-item\">
+                              <strong>Actualidad Nacional</strong>
+                              Monitoreo continuo de las principales incidencias informativas del país.
+                          </div>
+                      </div>
+                  </div>
+                  <div class=\"card\">
+                      <div class=\"section-title\">⚽ Deportes</div>
+                      <div class=\"news-grid\">
+                          <div class=\"news-item\">
+                              <strong>Agenda Deportiva</strong>
+                              Resumen de la jornada futbolística y eventos estelares del fin de semana.
+                          </div>
+                      </div>
+                  </div>
+                  <footer>
+                      Zona Mixta CR • Publicado automáticamente vía GitHub Actions
+                  </footer>
+              </div>
+          </body>
+          </html>
+          '''
+          
+          with open('index.html', 'w', encoding='utf-8') as f:
+              f.write(html)
+          "
+
+      - name: Guardar cambios
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          git commit -m "Actualización automática del boletín diario" || exit 0
+          git push
+ 
+
