@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Boletín de noticias · Archivo de ediciones</title>
+<meta name="description" content="Boletín diario con noticias de Costa Rica, deportes, tecnología, actualidad internacional, Evangelio del día, santoral y mensaje positivo. Archivo de todas las ediciones.">
+<link rel="canonical" href="https://jrochab.github.io/boletin-noticias-crc/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Boletín de noticias">
+<meta property="og:locale" content="es_CR">
+<meta property="og:url" content="https://jrochab.github.io/boletin-noticias-crc/">
+<meta property="og:title" content="Boletín de noticias · Archivo de ediciones">
+<meta property="og:description" content="Costa Rica, deportes, tecnología, el mundo, el santoral y una dosis de motivación para comenzar el día.">
+<meta property="og:image" content="https://jrochab.github.io/boletin-noticias-crc/og-image.jpg">
+<meta property="og:image:type" content="image/jpeg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Amanecer sobre montañas con un mensaje positivo.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Boletín de noticias · Archivo de ediciones">
+<meta name="twitter:description" content="Costa Rica, deportes, tecnología, el mundo, el santoral y una dosis de motivación para comenzar el día.">
+<meta name="twitter:image" content="https://jrochab.github.io/boletin-noticias-crc/og-image.jpg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500;6..72,700&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+  --ink:#16252d; --muted:#4f6169; --paper:#f4f7f5; --card:#ffffff;
+  --jade:#1d6b59; --sun:#d98a1f; --mist:#dfe9e5; --line:#cfdcd6;
+  --serif:"Newsreader",Georgia,"Times New Roman",serif;
+  --sans:"Instrument Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ink:#e6efeb; --muted:#9fb3ab; --paper:#0f1a1f; --card:#16252c;
+    --jade:#5fc4a6; --sun:#f0b24d; --mist:#1c2f36; --line:#2a3f47;
+  }
+}
+:root[data-theme="dark"]{
+  --ink:#e6efeb; --muted:#9fb3ab; --paper:#0f1a1f; --card:#16252c;
+  --jade:#5fc4a6; --sun:#f0b24d; --mist:#1c2f36; --line:#2a3f47;
+}
+html{scroll-padding-top:calc(env(safe-area-inset-top,0px) + 56px);scroll-behavior:smooth}
+*,*::before,*::after{box-sizing:inherit}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:17px;line-height:1.6;-webkit-text-size-adjust:100%}
+a{color:var(--jade);text-underline-offset:3px}
+a:focus-visible,button:focus-visible{outline:3px solid var(--sun);outline-offset:2px;border-radius:4px}
+.wrap{max-width:680px;margin:0 auto;padding:0 20px}
+header.top{padding:28px 0 8px}
+.brand{font-family:var(--serif);font-weight:700;font-size:1.05rem;color:var(--jade);margin:0}
+.date{color:var(--muted);margin:2px 0 0;font-size:.95rem}
+h1{font-family:var(--serif);font-weight:700;font-size:clamp(2.1rem,8vw,3.1rem);line-height:1.08;margin:18px 0 10px;letter-spacing:-.01em}
+.lede{font-size:1.1rem;color:var(--muted);margin:0 0 6px}
+.meta{font-size:.9rem;color:var(--muted);margin:10px 0 0}
+.essential{margin:26px 0 8px;padding:18px 20px;background:var(--mist);border-radius:14px}
+.essential h2{margin:0 0 8px;font-size:1.15rem}
+.essential ol{margin:0;padding-left:1.2rem}
+.essential li{margin:6px 0}
+nav.chips{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--paper);border-bottom:1px solid var(--line);margin:18px -20px 0;padding:10px 20px;display:flex;gap:8px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+nav.chips a{flex:0 0 auto;text-decoration:none;color:var(--ink);background:var(--card);border:1px solid var(--line);padding:6px 14px;border-radius:999px;font-size:.92rem;font-weight:500}
+nav.chips a:active{background:var(--mist)}
+section{padding:34px 0 6px;border-bottom:1px solid var(--line)}
+section:last-of-type{border-bottom:0}
+h2.sec{font-family:var(--serif);font-size:1.7rem;line-height:1.15;margin:0 0 4px}
+.item{margin:22px 0 0}
+.tag{display:inline-block;font-size:.85rem;font-weight:600;color:var(--sun);margin:0 0 2px}
+h3{font-family:var(--serif);font-size:1.25rem;line-height:1.25;margin:0 0 6px}
+.item p{margin:0 0 8px}
+.src{font-size:.88rem;color:var(--muted)}
+.src a{margin-right:10px}
+.saints{list-style:none;padding:0;margin:14px 0 0}
+.saints li{padding:12px 0;border-top:1px solid var(--line)}
+.saints strong{display:block;font-family:var(--serif);font-size:1.15rem}
+.saints span{color:var(--muted);font-size:.95rem}
+figure.mensaje{margin:16px 0 0}
+figure.mensaje svg{display:block;width:100%;height:auto;border-radius:16px}
+blockquote{font-family:var(--serif);font-size:1.45rem;line-height:1.3;margin:18px 0 6px;padding:0;font-weight:500}
+figcaption{font-size:.85rem;color:var(--muted)}
+.share{margin:18px 0 0;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+button.btn{font:inherit;font-weight:600;background:var(--jade);color:#fff;border:0;padding:11px 20px;border-radius:999px;cursor:pointer;min-height:44px}
+:root[data-theme="dark"] button.btn{color:#0f1a1f}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) button.btn{color:#0f1a1f}}
+#copiado{color:var(--muted);font-size:.9rem}
+footer{padding:30px 0 40px;color:var(--muted);font-size:.88rem}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+
+.edicion{display:block;text-decoration:none;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin:12px 0}
+.edicion:active{background:var(--mist)}
+.edicion strong{font-family:var(--serif);font-size:1.2rem;display:block}
+.edicion span{color:var(--muted);font-size:.92rem}
+.nuevo{color:var(--sun);font-weight:600}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="top">
+  <p class="brand">Boletín de noticias</p>
+  <p class="date">Domingo, 11 de octubre de 2026</p>
+  <h1>El boletín, edición por edición</h1>
+  <p class="lede">Costa Rica, deportes, tecnología, el mundo, el Evangelio del día, el santoral y una dosis de motivación para comenzar el día.</p>
+  <p class="meta"><strong>Edición más reciente:</strong> domingo, 11 de octubre de 2026</p>
+  <p style="margin:18px 0 0"><button class="btn" type="button" onclick="location.href='ediciones-2026-10-11.html'">Leer la edición de hoy</button></p>
+</header>
+<section id="ediciones" style="border-bottom:0">
+  <h2 class="sec">Todas las ediciones</h2>
+  <!-- EDICIONES:INICIO (la más reciente va primero) -->
+  <a class="edicion" href="ediciones-2026-10-11.html"><strong>Domingo, 11 de octubre de 2026</strong><span class="nuevo">Edición de hoy</span> · Costa Rica, deportes, cultura, tecnología, internacional, Evangelio, santoral y mensaje positivo</a>
+  <!-- EDICIONES:FIN -->
+</section>
+<footer>Boletín diario · Archivo de ediciones. Edición más reciente: 11 de octubre de 2026.</footer>
+</div>
+</body>
+</html>
