@@ -16,36 +16,37 @@
     "allowed_methods": ["GET"],
     "respect_retry_after_header": true
   },
-  "SOURCE_RSS": [
-    {
-      "url": "https://news.google.com/rss/search?q=gamification",
-      "label": "Google News",
-      "keyword": "gamification"
-    },
-    {
-      "url": "https://news.google.com/rss/search?q=gamification&hl=it&gl=IT&ceid=IT:it",
-      "label": "Google News Italia",
-      "keyword": "gamification"
-    },
-    {
-      "url": "https://news.google.com/rss/search?q=gamified",
-      "label": "Google News",
-      "keyword": "gamified"
-    },
-    {
-      "url": "https://news.google.com/rss/search?q=%22gamificata%22+OR+%22gamificato%22&hl=it&gl=IT&ceid=IT:it",
-      "label": "Google News Italia",
-      "keyword": "gamificata OR gamificato"
-    },
-    {
-      "url": "https://www.reddit.com/search.rss?q=gamification",
-      "label": "Reddit",
-      "keyword": "gamification"
-    },
-    {
-      "url": "https://hnrss.org/newest?q=gamification",
-      "label": "Hacker News",
-      "keyword": "gamification"
-    }
-  ]
-}
+  
+"SOURCE_RSS": [
+  {
+    "url": "https://news.google.com/rss/search?q=noticias+Costa+Rica&hl=es-419&gl=CR&ceid=CR:es-419",
+    "label": "Costa Rica",
+    "keyword": "noticias Costa Rica"
+  },
+  {
+    "url": "https://news.google.com/rss/search?q=Centroamérica+OR+Latinoamérica&hl=es-419&gl=CR&ceid=CR:es-419",
+    "label": "Centroamérica y Latinoamérica",
+    "keyword": "Centroamérica Latinoamérica"
+  },
+  {
+    "url": "https://news.google.com/rss/search?q=noticias+internacionales+OR+mundo&hl=es-419&gl=CR&ceid=CR:es-419",
+    "label": "Noticias del mundo",
+    "keyword": "noticias internacionales"
+  },
+  {
+    "url": "https://news.google.com/rss/search?q=deportes+OR+fútbol&hl=es-419&gl=CR&ceid=CR:es-419",
+    "label": "Deportes",
+    "keyword": "deportes fútbol"
+  },
+  {
+    "url": "https://news.google.com/rss/search?q=tecnología+OR+inteligencia+artificial&hl=es-419&gl=CR&ceid=CR:es-419",
+    "label": "Tecnología",
+    "keyword": "tecnología inteligencia artificial"
+  },
+  {
+    "url": "https://news.google.com/rss/search?q=economía+OR+finanzas&hl=es-419&gl=CR&ceid=CR:es-419",
+    "label": "Economía",
+    "keyword": "economía finanzas"
+  }
+]
+
