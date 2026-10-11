@@ -343,6 +343,7 @@ button.btn{font:inherit;font-weight:600;background:var(--jade);color:#fff;border
 .edicion strong{font-family:var(--serif);font-size:1.2rem;display:block}
 .edicion span{color:var(--muted);font-size:.92rem}
 .edicion .nuevo{color:var(--sun);font-weight:600}
+.sant-head{display:flex;align-items:center;gap:14px}.sant-head h2{margin:0}.sant-icon{flex:0 0 auto}
 footer{padding:30px 0 40px;color:var(--muted);font-size:.88rem}
 @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
 """
@@ -355,6 +356,8 @@ SVG = """<svg viewBox="0 0 800 420" role="img" aria-label="Amanecer sobre monta�
 <path d="M90 420 L300 215 L330 200 L360 215 L560 420Z" fill="#2d6a58"/><path d="M300 215 L330 200 L360 215 L345 224 L330 218 L315 226Z" fill="#6b8f82"/>
 <path d="M0 340 Q150 300 300 345 T620 335 T800 340 L800 420 L0 420Z" fill="#1d4f40"/><path d="M0 385 Q200 355 400 385 T800 380 L800 420 L0 420Z" fill="#143a30"/>
 <path d="M170 140 q14 -16 28 0 q14 -16 28 0" fill="none" stroke="#14323c" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>"""
+
+ICONO_SANTORAL = '<svg class="sant-icon" width="64" height="64" viewBox="0 0 120 120" aria-hidden="true" focusable="false"><circle cx="60" cy="60" r="56" fill="#1d4f40"/><circle cx="60" cy="60" r="44" fill="none" stroke="#f0b24d" stroke-width="3"/><g stroke="#f0b24d" stroke-width="3" stroke-linecap="round"><line x1="60" y1="7" x2="60" y2="15" transform="rotate(0 60 60)"/><line x1="60" y1="7" x2="60" y2="15" transform="rotate(45 60 60)"/><line x1="60" y1="7" x2="60" y2="15" transform="rotate(90 60 60)"/><line x1="60" y1="7" x2="60" y2="15" transform="rotate(135 60 60)"/><line x1="60" y1="7" x2="60" y2="15" transform="rotate(180 60 60)"/><line x1="60" y1="7" x2="60" y2="15" transform="rotate(225 60 60)"/><line x1="60" y1="7" x2="60" y2="15" transform="rotate(270 60 60)"/><line x1="60" y1="7" x2="60" y2="15" transform="rotate(315 60 60)"/></g><rect x="55" y="30" width="10" height="60" rx="3" fill="#fff0b8"/><rect x="38" y="47" width="44" height="10" rx="3" fill="#fff0b8"/></svg>'
 
 FUENTES_WEB = ('<link rel="preconnect" href="https://fonts.googleapis.com">'
                '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
@@ -398,7 +401,7 @@ def cabecera(titulo, desc, url, img, tipo):
 
 
 def item_html(it):
-        s = f'<div class="item"><span class="tag">{esc(it["fuente"])}</span><h3><a href="{esc(it["link"])}" style="color:inherit">{esc(it["titulo"])}</a></h3>'
+    s = f'<div class="item"><span class="tag">{esc(it["fuente"])}</span><h3><a href="{esc(it["link"])}" style="color:inherit">{esc(it["titulo"])}</a></h3>'
     if it["resumen"]:
         s += f'<p>{esc(it["resumen"])}</p>'
     s += f'<p class="src">Nota completa: <a href="{esc(it["link"])}">{esc(it["fuente"])}</a></p></div>'
@@ -438,7 +441,7 @@ def pagina_edicion(d, secciones, eva, santos, msg):
     ref = eva["ref"] or "Lectura de hoy"
     h += f'<section id="evangelio"><h2 class="sec">Evangelio del día</h2><div class="item"><h3>{esc(ref)}</h3>'
     h += f'<p class="src">Lea el texto completo del día: <a href="{esc(eva["url"])}">EWTN</a></p></div></section>\n'
-    h += f'<section id="santoral"><h2 class="sec">Santoral del {d.day} de {MESES[d.month - 1]}</h2>'
+    h += f'<section id="santoral"><div class="sant-head">{ICONO_SANTORAL}<h2 class="sec">Santoral del {d.day} de {MESES[d.month - 1]}</h2></div>'
     if santos:
         h += '<ul class="saints">' + "".join(f'<li><strong>{esc(n)}</strong><span>{esc(r)}</span></li>' for n, r in santos) + '</ul>'
     else:
