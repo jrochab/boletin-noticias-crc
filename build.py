@@ -258,6 +258,85 @@ def evangelio(d):
     return res
 
 
+# ---------------------------------------------------------------------------
+# Texto del pasaje (Reina-Valera 1909, dominio público) vía bible.helloao.org
+# Se descarga una sola vez y se guarda en el repositorio (evangelios_rv1909.json).
+# ---------------------------------------------------------------------------
+BIBLIA_URL = "https://bible.helloao.org/api/spa_r09/complete.json"
+BIBLIA_CACHE = ROOT / "evangelios_rv1909.json"
+EVANGELIOS_ID = {"Mateo": "MAT", "Marcos": "MRK", "Lucas": "LUK", "Juan": "JHN"}
+
+
+def _texto_nodo(x):
+    if isinstance(x, str):
+        return x
+    if isinstance(x, list):
+        return "".join(_texto_nodo(i) for i in x)
+    if isinstance(x, dict):
+        if "text" in x:
+            return str(x["text"])
+        if x.get("type") in ("footnote", "note") or "noteId" in x:
+            return ""
+        if "content" in x:
+            return _texto_nodo(x["content"])
+    return ""
+
+
+def _extraer_evangelios(data):
+    libros = data.get("books") if isinstance(data, dict) else data
+    res = {}
+    for b in libros or []:
+        bid = str(b.get("id", "")).upper()
+        nombre = next((n for n, i in EVANGELIOS_ID.items() if i == bid), None)
+        if not nombre:
+            continue
+        caps = {}
+        for c in b.get("chapters", []):
+            ch = c.get("chapter", c)
+            versos = {}
+            for item in ch.get("content", []):
+                if isinstance(item, dict) and item.get("type") == "verse" and item.get("number") is not None:
+                    t = limpiar(_texto_nodo(item.get("content")))
+                    if t:
+                        k = str(item["number"])
+                        versos[k] = (versos.get(k, "") + " " + t).strip()
+            if ch.get("number") is not None and versos:
+                caps[str(ch["number"])] = versos
+        res[nombre] = caps
+    return res
+
+
+def evangelios_rv():
+    if BIBLIA_CACHE.exists():
+        return json.loads(BIBLIA_CACHE.read_text(encoding="utf-8"))
+    data = json.loads(fetch(BIBLIA_URL, timeout=180).decode("utf-8"))
+    ev = _extraer_evangelios(data)
+    if not any(ev.values()):
+        top = list(data.keys()) if isinstance(data, dict) else type(data).__name__
+        libro = (data.get("books") or [{}])[0] if isinstance(data, dict) else {}
+        print(f"  ! Texto bíblico: estructura no reconocida. Claves: {top}; "
+              f"libro[0]: {list(libro.keys()) if isinstance(libro, dict) else '?'}", file=sys.stderr)
+        return None
+    BIBLIA_CACHE.write_text(json.dumps(ev, ensure_ascii=False), encoding="utf-8")
+    print("  Texto bíblico: evangelios guardados en caché")
+    return ev
+
+
+def pasaje_rv(ref):
+    """Versículos de una cita simple como 'Mateo 22, 1-14'. Devuelve [(n, texto), ...] o None."""
+    m = re.fullmatch(r"(Mateo|Marcos|Lucas|Juan) (\d+), (\d+)[a-d]?(?:-(\d+)[a-d]?)?", ref or "")
+    if not m:
+        return None
+    ev = evangelios_rv()
+    if not ev:
+        return None
+    libro, cap, a = m.group(1), m.group(2), int(m.group(3))
+    b = int(m.group(4) or a)
+    versos = (ev.get(libro) or {}).get(cap) or {}
+    out = [(n, versos[str(n)]) for n in range(a, b + 1) if str(n) in versos]
+    return out or None
+
+
 def santoral(d):
     datos = json.loads((ROOT / "santoral.json").read_text(encoding="utf-8"))
     return datos.get(f"{d.month:02d}-{d.day:02d}", [])
@@ -418,6 +497,7 @@ button.btn{font:inherit;font-weight:600;background:var(--jade);color:#fff;border
 .region dl{margin:10px 0 4px}.region dt{font-weight:600;margin-top:6px}.region dd{margin:0}
 .aviso{margin:18px 0 0;padding:14px 16px;border-left:4px solid var(--sun);background:var(--mist);border-radius:0 12px 12px 0}
 .aviso h3{margin:2px 0 6px}.aviso p{margin:0 0 6px}
+.lectura{margin:10px 0 0;border:1px solid var(--line);border-radius:12px;padding:10px 14px;background:var(--card)}.lectura summary{cursor:pointer;font-weight:600;color:var(--jade)}.lectura p{margin:10px 0 0}.lectura sup{color:var(--sun);font-weight:600;margin-right:4px}
 footer{padding:30px 0 40px;color:var(--muted);font-size:.88rem}
 @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
 """
@@ -578,6 +658,10 @@ def pagina_edicion(d, secciones, eva, santos, msg, clima=None):
     h += f'<p class="src">Lea el Evangelio completo: {enlaces}</p>'
     if eva.get("video"):
         h += f'<p class="src"><a href="{esc(eva["video"])}">Ver el Evangelio de hoy en vídeo</a></p>'
+    if eva.get("texto"):
+        h += '<details class="lectura"><summary>Leer el pasaje aquí</summary>'
+        h += "".join(f'<p><sup>{n}</sup> {esc(t)}</p>' for n, t in eva["texto"])
+        h += '<p class="src">Texto: Reina-Valera 1909 (dominio público). La traducción que se proclama en misa es otra, así que puede haber diferencias.</p></details>'
     h += '</div></section>\n'
     h += f'<section id="santoral"><div class="sant-head">{ICONO_SANTORAL}<h2 class="sec">Santoral del {d.day} de {MESES[d.month - 1]}</h2></div>'
     if santos:
@@ -649,6 +733,11 @@ def main():
         print("Ninguna fuente respondió; no se publica una edición vacía.", file=sys.stderr)
         sys.exit(1)
     eva, santos, msg = evangelio(hoy), santoral(hoy), mensaje(hoy)
+    try:
+        eva["texto"] = pasaje_rv(eva.get("ref"))
+    except Exception as e:
+        print(f"  ! Texto bíblico: {e}", file=sys.stderr)
+        eva["texto"] = None
     try:
         clima = imn.obtener(fetch, parse_feed, ahora)
     except Exception as e:
