@@ -19,12 +19,19 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Generar contenido y actualizar boletin
+      - name: Generar contenido completo y actualizar boletin
         run: |
           python -c "
           import datetime
           
-          hoy = datetime.datetime.now().strftime('%A, %d de %B de %Y')
+          # Diccionario de meses y días en español para evitar dependencias del sistema operativo
+          dias = {'Monday': 'Lunes', 'Tuesday': 'Martes', 'Wednesday': 'Miércoles', 'Thursday': 'Jueves', 'Friday': 'Viernes', 'Saturday': 'Sábado', 'Sunday': 'Domingo'}
+          meses = {'January': 'enero', 'February': 'febrero', 'March': 'marzo', 'April': 'abril', 'May': 'mayo', 'June': 'junio', 'July': 'julio', 'August': 'agosto', 'September': 'septiembre', 'October': 'octubre', 'November': 'noviembre', 'December': 'diciembre'}
+          
+          now = datetime.datetime.now()
+          dia_str = dias.get(now.strftime('%A'), now.strftime('%A'))
+          mes_str = meses.get(now.strftime('%B'), now.strftime('%B'))
+          hoy = f\"{dia_str}, {now.day} de {mes_str} de {now.year}\"
           
           html = f'''<!DOCTYPE html>
           <html lang=\\'es\\'>
@@ -144,14 +151,14 @@ jobs:
                       </div>
                   </div>
                   <div class=\"efemerides-box\">
-                      🗓️ <strong>Actualización Automática Diaria</strong> • Edición en vivo sincronizada en la nube.
+                      🗓️ <strong>Edición Diaria Automatizada</strong> • Actualizado automáticamente en la nube.
                   </div>
                   <div class=\"card\">
-                      <div class=\"section-title\">🇨🇷 Costa Rica</div>
+                      <div class=\"section-title\">🇨🇷 Costa Rica — Actualidad</div>
                       <div class=\"news-grid\">
                           <div class=\"news-item\">
-                              <strong>Actualidad Nacional</strong>
-                              Monitoreo continuo de las principales incidencias informativas del país.
+                              <strong>Resumen Nacional</strong>
+                              Monitoreo continuo de las principales incidencias informativas, económicas y de interés general en el país.
                           </div>
                       </div>
                   </div>
@@ -159,8 +166,8 @@ jobs:
                       <div class=\"section-title\">⚽ Deportes</div>
                       <div class=\"news-grid\">
                           <div class=\"news-item\">
-                              <strong>Agenda Deportiva</strong>
-                              Resumen de la jornada futbolística y eventos estelares del fin de semana.
+                              <strong>Agenda y Cobertura Deportiva</strong>
+                              Seguimiento a los eventos de la jornada, fútbol nacional e internacional y competiciones estelares.
                           </div>
                       </div>
                   </div>
@@ -176,12 +183,10 @@ jobs:
               f.write(html)
           "
 
-      - name: Guardar cambios
+      - name: Guardar cambios en el repositorio
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add index.html
-          git commit -m "Actualización automática del boletín diario" || exit 0
+          git commit -m "Actualizar diseño completo del boletín" || exit 0
           git push
- 
-
