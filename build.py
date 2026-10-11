@@ -473,6 +473,17 @@ def pagina_indice(eds):
     return h
 
 
+def aviso(d, secciones, url):
+    """Texto del mensaje de Telegram (formato HTML de Telegram)."""
+    lin = [f"<b>{NOMBRE} 🇨🇷</b>", fecha_larga(d), ""]
+    for sid in ("costa-rica", "deportes", "internacional"):
+        its = secciones.get(sid) or []
+        if its:
+            lin.append("• " + html.escape(recortar(its[0]["titulo"], 110), quote=False))
+    lin += ["", f'<a href="{url}">Leer la edición completa</a>']
+    return "\n".join(lin)
+
+
 # ---------------------------------------------------------------------------
 def main():
     ahora = datetime.now(timezone.utc)
@@ -493,6 +504,9 @@ def main():
         sys.exit(1)
     eva, santos, msg = evangelio(hoy), santoral(hoy), mensaje(hoy)
     destino.write_text(pagina_edicion(hoy, secciones, eva, santos, msg), encoding="utf-8")
+    if os.environ.get("AVISO_PATH"):
+        Path(os.environ["AVISO_PATH"]).write_text(
+            aviso(hoy, secciones, f"{BASE}/ediciones-{ymd}.html"), encoding="utf-8")
     sub = f"{NOMBRE} · {hoy.day} de {MESES[hoy.month - 1]} de {hoy.year}"
     imagen_og(ROOT / f"ediciones-{ymd}-og.jpg", msg, sub)
     imagen_og(ROOT / "og-image.jpg", msg, sub)
