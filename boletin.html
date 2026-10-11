@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zona Mixta CR</title>
+    <style>
+        :root { --bg: #0f1117; --card: #1a1d24; --text: #f3f4f6; --muted: #9ca3af; --accent: #3b82f6; --border: #2d3139; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); padding: 16px; display: flex; justify-content: center; }
+        .wrapper { width: 100%; max-width: 680px; }
+        header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 12px; margin-bottom: 20px; }
+        .brand { font-size: 18px; font-weight: 800; }
+        .brand span { color: var(--accent); }
+        .badge { font-size: 12px; background: #22262e; border: 1px solid var(--border); padding: 4px 10px; border-radius: 12px; color: var(--muted); }
+        .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+        .img-card { padding: 0; overflow: hidden; }
+        .img-card img { width: 100%; height: 160px; object-fit: cover; display: block; }
+        .quote { padding: 16px; font-style: italic; font-size: 14px; border-left: 3px solid var(--accent); }
+        .sec-title { font-size: 12px; text-transform: uppercase; color: var(--accent); font-weight: 700; margin-bottom: 10px; letter-spacing: 1px; }
+        .news { background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 6px; padding: 12px; font-size: 14px; }
+        footer { text-align: center; font-size: 11px; color: var(--muted); margin-top: 24px; }
+    </style>
+</head>
+<body>
+    <div class="wrapper">
+        <header>
+            <div class="brand"><span>ZONA MIXTA</span> CR</div>
+            <div class="badge" id="fecha">Cargando...</div>
+        </header>
+        <div class="card img-card">
+            <img id="img-motivacional" src="" alt="Imagen">
+            <div class="quote" id="frase-motivacional">Cargando...</div>
+        </div>
+        <div class="card">
+            <div class="sec-title">🇨🇷 Costa Rica</div>
+            <div class="news" id="noticia-cr">Cargando...</div>
+        </div>
+        <div class="card">
+            <div class="sec-title">⚽ Deportes</div>
+            <div class="news" id="noticia-dep">Cargando...</div>
+        </div>
+        <footer>Zona Mixta CR • Boletín Diario</footer>
+    </div>
+    <script>
+        fetch('./config.json')
+            .then(r => r.json())
+            .then(d => {
+                document.getElementById('fecha').textContent = d.fecha;
+                document.getElementById('img-motivacional').src = d.imagen_motivacional;
+                document.getElementById('frase-motivacional').textContent = '"' + d.frase_motivacional + '"';
+                document.getElementById('noticia-cr').textContent = d.noticia_costa_rica;
+                document.getElementById('noticia-dep').textContent = d.noticia_deportes;
+            })
+            .catch(e => console.error(e));
+    </script>
+</body>
+</html>
