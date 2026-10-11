@@ -18,7 +18,7 @@
         .img-card img { width: 100%; height: 160px; object-fit: cover; display: block; }
         .quote { padding: 16px; font-style: italic; font-size: 14px; border-left: 3px solid var(--accent); }
         .sec-title { font-size: 12px; text-transform: uppercase; color: var(--accent); font-weight: 700; margin-bottom: 10px; letter-spacing: 1px; }
-        .news { background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 6px; padding: 12px; font-size: 14px; }
+        .news { background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 6px; padding: 12px; font-size: 14px; line-height: 1.5; }
         footer { text-align: center; font-size: 11px; color: var(--muted); margin-top: 24px; }
     </style>
 </head>
@@ -26,34 +26,21 @@
     <div class="wrapper">
         <header>
             <div class="brand"><span>ZONA MIXTA</span> CR</div>
-            <div class="badge" id="fecha">Cargando...</div>
+            <div class="badge">Domingo, 11 Octubre 2026</div>
         </header>
         <div class="card img-card">
-            <img id="img-motivacional" src="" alt="Imagen">
-            <div class="quote" id="frase-motivacional">Cargando...</div>
+            <img src="https://images.unsplash.com/photo-1517649763962-0c6232662000?w=800" alt="Imagen">
+            <div class="quote">"El éxito no es el final, el fracaso no es fatal: lo que cuenta es el valor para continuar."</div>
         </div>
         <div class="card">
             <div class="sec-title">🇨🇷 Costa Rica</div>
-            <div class="news" id="noticia-cr">Cargando...</div>
+            <div class="news">Resumen de actualidad nacional para Costa Rica.</div>
         </div>
         <div class="card">
             <div class="sec-title">⚽ Deportes</div>
-            <div class="news" id="noticia-dep">Cargando...</div>
+            <div class="news">Novedades y resultados del deporte nacional e internacional.</div>
         </div>
         <footer>Zona Mixta CR • Boletín Diario</footer>
     </div>
-    <script>
-        fetch('./config.json')
-            .then(r => r.json())
-            .then(d => {
-                document.getElementById('fecha').textContent = d.fecha;
-                document.getElementById('img-motivacional').src = d.imagen_motivacional;
-                document.getElementById('frase-motivacional').textContent = '"' + d.frase_motivacional + '"';
-                document.getElementById('noticia-cr').textContent = d.noticia_costa_rica;
-                document.getElementById('noticia-dep').textContent = d.noticia_deportes;
-            })
-            .catch(e => console.error(e));
-    </script>
 </body>
 </html>
- 
