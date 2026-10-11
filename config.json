@@ -3,7 +3,7 @@
   "REQUEST_TIMEOUT": 20,
   "TIMEZONE_STR": "Europe/Rome",
   "URL": "https://jackydangelo.github.io/staticfeed/",
-  "PAGE_TITLE": "Gamification News",
+  "PAGE_TITLE": "Boletín de Noticias CRC",
   "FOOTER_TEXT": "Feed per temi di gamification. Parte del progetto \"Questa è gamification!\" di Giacomo D'angelo.",
   "USER_AGENT": "Staticfeed/1.0.0 (RSS Aggregator; +https://jackydangelo.github.io/staticfeed/)",
   "RETRY_CONFIG": {
