@@ -14,6 +14,8 @@ from zoneinfo import ZoneInfo
 
 from PIL import Image, ImageDraw, ImageFont
 
+import tiempo as imn
+
 NOMBRE = "Zona Mixta CRC"
 BASE = "https://jrochab.github.io/boletin-noticias-crc"
 TZ = ZoneInfo("America/Costa_Rica")
@@ -344,6 +346,11 @@ button.btn{font:inherit;font-weight:600;background:var(--jade);color:#fff;border
 .edicion span{color:var(--muted);font-size:.92rem}
 .edicion .nuevo{color:var(--sun);font-weight:600}
 .sant-head{display:flex;align-items:center;gap:14px}.sant-head h2{margin:0}.sant-icon{flex:0 0 auto}
+.region{border-top:1px solid var(--line);padding:10px 0}.region summary{cursor:pointer;list-style:none}.region summary::-webkit-details-marker{display:none}
+.region summary strong{display:block;font-family:var(--serif);font-size:1.15rem}.region summary span{color:var(--muted);font-size:.95rem}
+.region dl{margin:10px 0 4px}.region dt{font-weight:600;margin-top:6px}.region dd{margin:0}
+.aviso{margin:18px 0 0;padding:14px 16px;border-left:4px solid var(--sun);background:var(--mist);border-radius:0 12px 12px 0}
+.aviso h3{margin:2px 0 6px}.aviso p{margin:0 0 6px}
 footer{padding:30px 0 40px;color:var(--muted);font-size:.88rem}
 @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
 """
@@ -408,7 +415,58 @@ def item_html(it):
     return s
 
 
-def pagina_edicion(d, secciones, eva, santos, msg):
+def _c(x):
+    return f"{x:.1f}".replace(".", ",")
+
+
+def tiempo_html(t):
+    if not t:
+        return ""
+    h = '<section id="tiempo"><h2 class="sec">El tiempo</h2>\n'
+    a = t.get("aviso")
+    if a and a.get("reciente"):
+        h += '<div class="aviso"><span class="tag">Aviso meteorológico del IMN</span>'
+        h += f'<h3><a href="{esc(a["link"])}" style="color:inherit">{esc(a["titulo"])}</a></h3>'
+        if a.get("fecha"):
+            h += f'<p class="src">{esc(a["fecha"])}</p>'
+        if a.get("diag"):
+            h += f'<p>{esc(a["diag"])}</p>'
+        h += '</div>\n'
+    elif a:
+        h += f'<p class="vacio">Sin avisos recientes del IMN. <a href="{imn.URL_AVISOS}">Ver el historial de avisos</a>.</p>\n'
+    p = t.get("pronostico")
+    if p:
+        h += f'<div class="item"><span class="tag">Pronóstico regional</span>'
+        if p.get("valido"):
+            h += f'<p class="src">Válido para: {esc(p["valido"])}. Toque una región para ver el detalle.</p>'
+        h += '</div>\n'
+        for r in p["regiones"]:
+            per = r["periodos"]
+            resumen = f'Tarde: {per[2]}' if len(per) > 2 and per[2] else ""
+            h += f'<details class="region"><summary><strong>{esc(r["nombre"])}</strong><span>{esc(resumen)}</span></summary><dl>'
+            for nombre, txt in zip(imn.PERIODOS, per):
+                if txt:
+                    h += f'<dt>{nombre}</dt><dd>{esc(txt)}</dd>'
+            h += '</dl>'
+            if r["ciudades"]:
+                h += '<p class="src">' + " · ".join(f'{esc(c)} {_c(mn)}–{_c(mx)} °C' for c, mx, mn in r["ciudades"]) + '</p>'
+            h += '</details>\n'
+        if p.get("comentario"):
+            h += f'<div class="item"><h3>Comentario general</h3><p>{esc(recortar(p["comentario"], 420))}</p></div>\n'
+        extra = []
+        if p.get("sol"):
+            extra.append(f'Sol: sale {p["sol"][0]}, se pone {p["sol"][1]}')
+        if p.get("luna"):
+            extra.append(f'Luna: sale {p["luna"][0]}, se pone {p["luna"][1]}')
+        if p.get("fase"):
+            extra.append(f'Fase lunar: {p["fase"].lower()}')
+        if extra:
+            h += f'<p class="src">San José · {esc(" · ".join(extra))}</p>\n'
+    h += f'<p class="src">Fuente: <a href="{imn.URL_PRONOSTICO}">Instituto Meteorológico Nacional</a> · <a href="{imn.URL_AVISOS}">Avisos</a></p></section>\n'
+    return h
+
+
+def pagina_edicion(d, secciones, eva, santos, msg, clima=None):
     ymd = f"{d:%Y-%m-%d}"
     larga = fecha_larga(d)
     url = f"{BASE}/ediciones-{ymd}.html"
@@ -432,12 +490,16 @@ def pagina_edicion(d, secciones, eva, santos, msg):
     h += '<nav class="chips" aria-label="Secciones">'
     for s in SECCIONES:
         h += f'<a href="#{s["id"]}">{esc(s["titulo"])}</a>'
+        if s["id"] == "costa-rica" and clima:
+            h += '<a href="#tiempo">El tiempo</a>'
     h += '<a href="#evangelio">Evangelio</a><a href="#santoral">Santoral</a><a href="#mensaje">Mensaje positivo</a></nav>\n'
     for s in SECCIONES:
         h += f'<section id="{s["id"]}"><h2 class="sec">{esc(s["titulo"])}</h2>\n'
         its = secciones.get(s["id"]) or []
         h += "\n".join(item_html(i) for i in its) if its else '<p class="vacio">Hoy no hay titulares disponibles en esta sección.</p>'
         h += "</section>\n"
+        if s["id"] == "costa-rica":
+            h += tiempo_html(clima)
     ref = eva["ref"] or "Lectura de hoy"
     h += f'<section id="evangelio"><h2 class="sec">Evangelio del día</h2><div class="item"><h3>{esc(ref)}</h3>'
     h += f'<p class="src">Lea el texto completo del día: <a href="{esc(eva["url"])}">EWTN</a></p></div></section>\n'
@@ -473,13 +535,19 @@ def pagina_indice(eds):
     return h
 
 
-def aviso(d, secciones, url):
+def aviso(d, secciones, url, clima=None):
     """Texto del mensaje de Telegram (formato HTML de Telegram)."""
     lin = [f"<b>{NOMBRE} 🇨🇷</b>", fecha_larga(d), ""]
     for sid in ("costa-rica", "deportes", "internacional"):
         its = secciones.get(sid) or []
         if its:
             lin.append("• " + html.escape(recortar(its[0]["titulo"], 110), quote=False))
+    corto = imn.resumen_corto(clima)
+    if corto:
+        lin += ["", "☁️ " + html.escape(corto, quote=False)]
+    av = (clima or {}).get("aviso")
+    if av and av.get("reciente"):
+        lin.append("⚠️ Aviso del IMN: " + html.escape(recortar(av["titulo"], 100), quote=False))
     lin += ["", f'<a href="{url}">Leer la edición completa</a>']
     return "\n".join(lin)
 
@@ -503,10 +571,16 @@ def main():
         print("Ninguna fuente respondió; no se publica una edición vacía.", file=sys.stderr)
         sys.exit(1)
     eva, santos, msg = evangelio(hoy), santoral(hoy), mensaje(hoy)
-    destino.write_text(pagina_edicion(hoy, secciones, eva, santos, msg), encoding="utf-8")
+    try:
+        clima = imn.obtener(fetch, parse_feed, ahora)
+    except Exception as e:
+        print(f"  ! Tiempo: {e}", file=sys.stderr)
+        clima = None
+    print("- El tiempo:", "listo" if clima else "no disponible")
+    destino.write_text(pagina_edicion(hoy, secciones, eva, santos, msg, clima), encoding="utf-8")
     if os.environ.get("AVISO_PATH"):
         Path(os.environ["AVISO_PATH"]).write_text(
-            aviso(hoy, secciones, f"{BASE}/ediciones-{ymd}.html"), encoding="utf-8")
+            aviso(hoy, secciones, f"{BASE}/ediciones-{ymd}.html", clima), encoding="utf-8")
     sub = f"{NOMBRE} · {hoy.day} de {MESES[hoy.month - 1]} de {hoy.year}"
     imagen_og(ROOT / f"ediciones-{ymd}-og.jpg", msg, sub)
     imagen_og(ROOT / "og-image.jpg", msg, sub)
