@@ -655,6 +655,12 @@ def tiempo_html(t):
     return h
 
 
+def imagen_mensaje_diaria(d):
+    """Fotografía gratuita aleatoria, estable durante el día y distinta al cambiar la fecha."""
+    clave = f"positivo-{d:%Y%m%d}"
+    return f"https://picsum.photos/seed/{clave}/1200/630"
+
+
 def pagina_edicion(d, secciones, eva, santos, msg, clima=None):
     ymd = f"{d:%Y-%m-%d}"
     larga = fecha_larga(d)
@@ -666,7 +672,8 @@ def pagina_edicion(d, secciones, eva, santos, msg, clima=None):
         its = secciones.get(sid) or []
         if its:
             esenciales.append((sid, its[0]["titulo"]))
-    h = cabecera(titulo, desc, url, f"{BASE}/ediciones-{ymd}-og.jpg", "article")
+    img_diaria = imagen_mensaje_diaria(d)
+    h = cabecera(titulo, desc, url, img_diaria, "article")
     h += f'<body>\n<div class="wrap">\n<header class="top">\n<p class="brand"><a href="index.html" style="text-decoration:none">{NOMBRE}</a> · <a href="index.html">Archivo de ediciones</a></p>\n'
     h += f'<p class="date">{larga}</p>\n<h1>Noticias de hoy, en cinco minutos</h1>\n'
     h += '<p class="lede">Costa Rica, deportes, tecnología, el mundo, el santoral y una dosis de motivación para comenzar el día.</p>\n'
@@ -711,8 +718,8 @@ def pagina_edicion(d, secciones, eva, santos, msg, clima=None):
     else:
         h += '<p class="vacio">Consulte el santoral completo del día en el enlace de abajo.</p>'
     h += f'<p class="src" style="margin-top:12px"><a href="https://www.aciprensa.com/calendario/{ymd}">Santoral y lecturas en ACI Prensa</a></p></section>\n'
-    h += f'<section id="mensaje"><h2 class="sec">Mensaje positivo</h2><figure class="mensaje">{SVG}<blockquote>{esc(msg)}</blockquote>'
-    h += f'<figcaption>Ilustración de {NOMBRE} · {larga}</figcaption></figure>'
+    h += f'<section id="mensaje"><h2 class="sec">Mensaje positivo</h2><figure class="mensaje"><img src="{esc(img_diaria)}" alt="Fotografía inspiradora del día" loading="lazy" style="display:block;width:100%;height:auto;border-radius:16px"><blockquote>{esc(msg)}</blockquote>'
+    h += f'<figcaption>Fotografía gratuita de Lorem Picsum · {larga}</figcaption></figure>'
     h += '<div class="share"><button class="btn" id="compartir" type="button">Compartir esta edición</button><span id="copiado" role="status" aria-live="polite"></span></div></section>\n'
     h += f'<footer><a href="index.html">Volver al archivo de ediciones</a><br>{NOMBRE} · Edición del {larga.lower()}. Los titulares y extractos pertenecen a los medios citados; siga cada enlace para leer la nota completa.</footer>\n</div>\n{JS_COMPARTIR}\n</body>\n</html>\n'
     return h
@@ -723,7 +730,7 @@ def pagina_indice(eds):
     d = datetime.strptime(ult["fecha"], "%Y-%m-%d")
     h = cabecera(f"{NOMBRE} · Archivo de ediciones",
                  "Boletín diario de noticias de Costa Rica, deportes, tecnología, el mundo, el Evangelio, el santoral y un mensaje positivo. Archivo de todas las ediciones.",
-                 f"{BASE}/", f"{BASE}/og-image.jpg", "website")
+                 f"{BASE}/", imagen_mensaje_diaria(d), "website")
     h += f'<body>\n<div class="wrap">\n<header class="top"><p class="brand">{NOMBRE}</p><p class="date">{fecha_larga(d)}</p>\n'
     h += '<h1>El boletín, edición por edición</h1>\n<p class="lede">Costa Rica, deportes, tecnología, el mundo, el Evangelio del día, el santoral y una dosis de motivación para comenzar el día.</p>\n'
     h += f'<p class="meta"><strong>Edición más reciente:</strong> {fecha_larga(d).lower()}</p>\n'
