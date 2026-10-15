@@ -583,21 +583,20 @@ def detectar_posible_paywall(url):
     )
     try:
         req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "text/html,*/*"})
-        with urllib.request.urlopen(req, timeout=8) as r:
+        with urllib.request.urlopen(req, timeout=3) as r:
             tipo = r.headers.get("Content-Type", "").lower()
             if "html" not in tipo:
                 return False
-            contenido = r.read(250000).decode("utf-8", errors="ignore").lower()
+            contenido = r.read(80000).decode("utf-8", errors="ignore").lower()
         return any(p in contenido for p in patrones)
     except Exception:
         return False
 
 
 def item_html(it):
-    # La comprobación se limita a La Nación para no ralentizar la edición
-    # consultando cada artículo de todas las fuentes.
-    es_nacion = "nacion.com" in it["link"].lower() or it["fuente"].lower().startswith("la nación")
-    aviso_pago = ' <span class="tag">Posible muro de pago</span>' if es_nacion and detectar_posible_paywall(it["link"]) else ""
+    # Comprobación orientativa en todas las fuentes. Timeout corto para que
+    # una página lenta no detenga la publicación; no se eliminan titulares.
+    aviso_pago = ' <span class="tag">Posible muro de pago</span>' if detectar_posible_paywall(it["link"]) else ""
     s = f'<div class="item"><span class="tag">{esc(it["fuente"])}</span>{aviso_pago}<h3><a href="{esc(it["link"])}" style="color:inherit">{esc(it["titulo"])}</a></h3>'
     if it["resumen"]:
         s += f'<p>{esc(it["resumen"])}</p>'
