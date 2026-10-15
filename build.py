@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Zona Mixta CRC: genera la edición diaria con titulares de RSS (sin IA, sin costo)."""
 import html
+from functools import lru_cache
 import json
 import os
 import re
@@ -27,28 +28,41 @@ UA = "Mozilla/5.0 (compatible; ZonaMixtaCRC/1.0; +https://github.com/jrochab/bol
 # Para agregar o quitar medios, edite solo esta lista.
 # ---------------------------------------------------------------------------
 SECCIONES = [
-    {"id": "costa-rica", "titulo": "Costa Rica", "max": 5, "feeds": [
-        ("La Nación", "https://www.nacion.com/arc/outboundfeeds/rss/?outputType=xml"),
+    # Se priorizan medios y agencias con más posibilidades de lectura gratuita.
+    # Google Noticias funciona como agregador cuando el medio no ofrece RSS estable.
+    {"id": "costa-rica", "titulo": "Costa Rica", "max": 8, "feeds": [
         ("CRHoy", "https://www.crhoy.com/feed/"),
-        ("Observador", "https://observador.cr/feed/"),
+        ("Diario Extra", "https://news.google.com/rss/search?q=site%3Adiarioextra.com&hl=es-419&gl=CR&ceid=CR%3Aes-419"),
+        ("La Teja", "https://news.google.com/rss/search?q=site%3Alateja.cr&hl=es-419&gl=CR&ceid=CR%3Aes-419"),
+        ("Teletica", "https://news.google.com/rss/search?q=site%3Ateletica.com&hl=es-419&gl=CR&ceid=CR%3Aes-419"),
+        ("La República", "https://news.google.com/rss/search?q=site%3Alarepublica.net&hl=es-419&gl=CR&ceid=CR%3Aes-419"),
         ("El Financiero", "https://www.elfinancierocr.com/arc/outboundfeeds/rss/?outputType=xml"),
+        ("Observador", "https://observador.cr/feed/"),
+        ("La Nación", "https://www.nacion.com/arc/outboundfeeds/rss/?outputType=xml"),
     ]},
-    {"id": "deportes", "titulo": "Deportes", "max": 3, "feeds": [
-        ("La Nación", "https://www.nacion.com/arc/outboundfeeds/rss/category/puro-deporte/?outputType=xml"),
-        ("CRHoy", "https://www.crhoy.com/deportes/feed/"),
-        ("Observador", "https://observador.cr/category/deportes/feed/"),
+    {"id": "deportes", "titulo": "Deportes", "max": 5, "feeds": [
+        ("CRHoy Deportes", "https://www.crhoy.com/deportes/feed/"),
+        ("Diario Extra Deportes", "https://news.google.com/rss/search?q=site%3Adiarioextra.com+deportes&hl=es-419&gl=CR&ceid=CR%3Aes-419"),
+        ("La Teja Deportes", "https://news.google.com/rss/search?q=site%3Alateja.cr+deportes&hl=es-419&gl=CR&ceid=CR%3Aes-419"),
+        ("Observador Deportes", "https://observador.cr/category/deportes/feed/"),
+        ("La Nación Deportes", "https://www.nacion.com/arc/outboundfeeds/rss/category/puro-deporte/?outputType=xml"),
     ]},
-    {"id": "cultura", "titulo": "Cultura", "max": 2, "feeds": [
-        ("La Nación", "https://www.nacion.com/arc/outboundfeeds/rss/category/viva/?outputType=xml"),
-        ("DW", "https://rss.dw.com/xml/rss-sp-cul"),
+    {"id": "cultura", "titulo": "Cultura", "max": 3, "feeds": [
+        ("DW Cultura", "https://rss.dw.com/xml/rss-sp-cul"),
+        ("France 24", "https://www.france24.com/es/rss"),
+        ("La Nación Viva", "https://www.nacion.com/arc/outboundfeeds/rss/category/viva/?outputType=xml"),
     ]},
-    {"id": "tecnologia", "titulo": "Tecnología", "max": 3, "feeds": [
+    {"id": "tecnologia", "titulo": "Tecnología", "max": 4, "feeds": [
         ("Xataka", "https://feeds.weblogssl.com/xataka2"),
         ("Hipertextual", "https://hipertextual.com/feed"),
+        ("DW Tecnología", "https://rss.dw.com/xml/rss-sp-all"),
     ]},
-    {"id": "internacional", "titulo": "Actualidad internacional", "max": 4, "feeds": [
-        ("BBC Mundo", "https://feeds.bbci.co.uk/mundo/rss.xml"),
+    {"id": "internacional", "titulo": "Actualidad internacional", "max": 6, "feeds": [
+        ("France 24", "https://www.france24.com/es/rss"),
         ("DW", "https://rss.dw.com/xml/rss-sp-all"),
+        ("BBC Mundo", "https://feeds.bbci.co.uk/mundo/rss.xml"),
+        ("EFE", "https://news.google.com/rss/search?q=site%3Aefe.com+noticias&hl=es-419&gl=CR&ceid=CR%3Aes-419"),
+        ("AFP", "https://news.google.com/rss/search?q=site%3Aafp.com%2Fes+actualidad&hl=es-419&gl=CR&ceid=CR%3Aes-419"),
         ("Euronews", "https://es.euronews.com/rss?level=theme&name=news"),
     ]},
 ]
@@ -554,8 +568,37 @@ def cabecera(titulo, desc, url, img, tipo):
 """
 
 
+@lru_cache(maxsize=250)
+def detectar_posible_paywall(url):
+    """Devuelve True solo si el HTML deja señales claras de muro de pago.
+
+    Es una comprobación orientativa: los muros cargados con JavaScript o los
+    bloqueos anti-bots pueden no detectarse. No se usa para descartar noticias.
+    """
+    patrones = (
+        "solo para suscriptores", "solo suscriptores", "contenido exclusivo",
+        "suscríbete para continuar", "suscribete para continuar",
+        "subscribe to continue", "subscriber-only", "paywall",
+        "inicia sesión para continuar", "inicia sesion para continuar",
+    )
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "text/html,*/*"})
+        with urllib.request.urlopen(req, timeout=8) as r:
+            tipo = r.headers.get("Content-Type", "").lower()
+            if "html" not in tipo:
+                return False
+            contenido = r.read(250000).decode("utf-8", errors="ignore").lower()
+        return any(p in contenido for p in patrones)
+    except Exception:
+        return False
+
+
 def item_html(it):
-    s = f'<div class="item"><span class="tag">{esc(it["fuente"])}</span><h3><a href="{esc(it["link"])}" style="color:inherit">{esc(it["titulo"])}</a></h3>'
+    # La comprobación se limita a La Nación para no ralentizar la edición
+    # consultando cada artículo de todas las fuentes.
+    es_nacion = "nacion.com" in it["link"].lower() or it["fuente"].lower().startswith("la nación")
+    aviso_pago = ' <span class="tag">Posible muro de pago</span>' if es_nacion and detectar_posible_paywall(it["link"]) else ""
+    s = f'<div class="item"><span class="tag">{esc(it["fuente"])}</span>{aviso_pago}<h3><a href="{esc(it["link"])}" style="color:inherit">{esc(it["titulo"])}</a></h3>'
     if it["resumen"]:
         s += f'<p>{esc(it["resumen"])}</p>'
     s += f'<p class="src">Nota completa: <a href="{esc(it["link"])}">{esc(it["fuente"])}</a></p></div>'
