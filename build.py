@@ -769,9 +769,11 @@ def main():
     hoy = ahora.astimezone(TZ).date()
     ymd = f"{hoy:%Y-%m-%d}"
     destino = ROOT / f"ediciones-{ymd}.html"
-    if destino.exists() and not os.environ.get("FORZAR"):
-        print(f"La edición {ymd} ya existe; no se reemplaza (use FORZAR=1 para rehacerla).")
-        return
+    # Siempre regenerar la edición del día. Así, al volver a ejecutar el flujo
+    # después de actualizar el código, se actualizan también la foto y la vista previa.
+    # Las ediciones de fechas anteriores no se modifican.
+    if destino.exists():
+        print(f"La edición {ymd} ya existe; se actualizará con la versión actual del programa.")
     print(f"Armando edición {ymd}")
     vistos, secciones = [], {}
     for s in SECCIONES:
