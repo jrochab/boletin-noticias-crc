@@ -429,18 +429,36 @@ def evangelios_rv():
     return ev
 
 
+def _capitulo_rv(libro, cap):
+    """Respaldo: descarga solo el capítulo pedido (archivo pequeño) si la Biblia completa no está disponible."""
+    bid = EVANGELIOS_ID[libro]
+    data = json.loads(fetch(f"https://bible.helloao.org/api/spa_r09/{bid}/{cap}.json", timeout=60).decode("utf-8"))
+    ev = _extraer_evangelios({"books": [{"id": bid, "chapters": [data]}]})
+    return (ev.get(libro) or {}).get(str(cap)) or {}
+
+
 def pasaje_rv(ref):
     """Versículos de una cita simple como 'Mateo 22, 1-14'. Devuelve [(n, texto), ...] o None."""
     m = re.fullmatch(r"(Mateo|Marcos|Lucas|Juan) (\d+), (\d+)[a-d]?(?:-(\d+)[a-d]?)?", ref or "")
     if not m:
-        return None
-    ev = evangelios_rv()
-    if not ev:
+        print(f"  ! Texto bíblico: la cita «{ref}» no es de un solo capítulo; se muestran los enlaces", file=sys.stderr)
         return None
     libro, cap, a = m.group(1), m.group(2), int(m.group(3))
     b = int(m.group(4) or a)
-    versos = (ev.get(libro) or {}).get(cap) or {}
+    versos = {}
+    try:
+        ev = evangelios_rv()
+        versos = ((ev or {}).get(libro) or {}).get(cap) or {}
+    except Exception as e:
+        print(f"  ! Texto bíblico (Biblia completa): {e}", file=sys.stderr)
+    if not versos:
+        try:
+            versos = _capitulo_rv(libro, cap)
+            print(f"  Texto bíblico: capítulo {libro} {cap} descargado por separado")
+        except Exception as e:
+            print(f"  ! Texto bíblico (capítulo): {e}", file=sys.stderr)
     out = [(n, versos[str(n)]) for n in range(a, b + 1) if str(n) in versos]
+    print(f"  Texto del Evangelio: {len(out)} versículos")
     return out or None
 
 
@@ -669,6 +687,7 @@ button.btn{font:inherit;font-weight:600;background:var(--jade);color:#fff;border
 .region dl{margin:10px 0 4px}.region dt{font-weight:600;margin-top:6px}.region dd{margin:0}
 .aviso{margin:18px 0 0;padding:14px 16px;border-left:4px solid var(--sun);background:var(--mist);border-radius:0 12px 12px 0}
 .aviso h3{margin:2px 0 6px}.aviso p{margin:0 0 6px}
+.evtxt p{margin:12px 0 0;font-size:1.08em;line-height:1.75}.evtxt sup{color:var(--sun);font-weight:600;margin:0 3px 0 5px;font-size:.7em}
 .lectura{margin:10px 0 0;border:1px solid var(--line);border-radius:12px;padding:10px 14px;background:var(--card)}.lectura summary{cursor:pointer;font-weight:600;color:var(--jade)}.lectura p{margin:10px 0 0}.lectura sup{color:var(--sun);font-weight:600;margin-right:4px}
 footer{padding:30px 0 40px;color:var(--muted);font-size:.88rem}
 @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
@@ -912,14 +931,14 @@ def pagina_edicion(d, secciones, eva, santos, msg, clima=None, preview_key=None)
     h += f'<h3>{esc(ref)}</h3>'
     if eva.get("lema"):
         h += f'<p>Tema de la homilía: «{esc(eva["lema"])}»</p>'
-    mas = f'<p class="src">Lea el Evangelio completo: {enlaces}</p>'
-    if eva.get("video"):
-        mas += f'<p class="src"><a href="{esc(eva["video"])}">Ver el Evangelio de hoy en vídeo</a></p>'
+    video = f'<p class="src"><a href="{esc(eva["video"])}">Ver el Evangelio de hoy en vídeo</a></p>' if eva.get("video") else ""
     if eva.get("texto"):
-        mas += '<details class="lectura"><summary>Leer el pasaje aquí</summary>'
-        mas += "".join(f'<p><sup>{n}</sup> {esc(t)}</p>' for n, t in eva["texto"])
-        mas += '<p class="src">Texto: Reina-Valera 1909 (dominio público). La traducción que se proclama en misa es otra, así que puede haber diferencias.</p></details>'
-    h += bloque_mas(mas, "evangelio", "Ver más del Evangelio")
+        # El Evangelio completo queda visible; solo los enlaces y el vídeo van detrás del botón.
+        h += '<div class="evtxt"><p>' + " ".join(f'<sup>{n}</sup>{esc(t)}' for n, t in eva["texto"]) + '</p></div>'
+        h += '<p class="src">Texto: Reina-Valera 1909 (dominio público). La traducción que se proclama en misa es otra, así que puede haber diferencias.</p>'
+        h += bloque_mas(f'<p class="src">Evangelio completo en: {enlaces}</p>' + video, "evangelio", "Ver más fuentes")
+    else:
+        h += f'<p>No se pudo cargar el texto aquí. Lea el Evangelio completo en: {enlaces}</p>' + video
     h += '</div></section>\n'
     h += f'<section id="santoral"><div class="sant-head">{ICONO_SANTORAL}<h2 class="sec">Santoral del {d.day} de {MESES[d.month - 1]}</h2></div>'
     if santos:
