@@ -644,6 +644,9 @@ header.top{padding:28px 0 8px}
 h1{font-family:var(--serif);font-weight:700;font-size:clamp(2.1rem,8vw,3.1rem);line-height:1.08;margin:18px 0 10px;letter-spacing:-.01em}
 .lede{font-size:1.1rem;color:var(--muted);margin:0 0 6px}
 .meta{font-size:.9rem;color:var(--muted);margin:10px 0 0}
+.datos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:22px 0 4px}@media (max-width:340px){.datos{grid-template-columns:1fr}}
+a.dato{display:flex;flex-direction:column;gap:3px;padding:14px 16px;border:2px solid var(--jade);border-radius:16px;background:var(--card);color:var(--ink);text-decoration:none}
+a.dato:hover{background:var(--mist)}.d-et{font-size:.78rem;color:var(--muted)}.d-val{display:flex;flex-direction:column;gap:2px}.d-fila{white-space:nowrap}.d-fila b{font-size:1.1rem}.d-fila small{font-size:.78rem;color:var(--muted)}.d-lk{margin-top:4px;font-size:.85rem;font-weight:600;color:var(--jade)}
 .essential{margin:26px 0 8px;padding:18px 20px;background:var(--mist);border-radius:14px}
 .essential h2{margin:0 0 8px;font-size:1.15rem}
 .essential ol{margin:0;padding-left:1.2rem}
@@ -807,6 +810,44 @@ def _c(x):
     return f"{x:.1f}".replace(".", ",")
 
 
+URL_DOLAR = "https://www.bccr.fi.cr/indicadores-economicos/tipo-de-cambio"
+
+
+def tipo_cambio():
+    """Tipo de cambio de referencia del dólar (BCCR) vía api.hacienda.go.cr. Devuelve {'compra','venta','fecha'} o None."""
+    def valor(x):
+        v = float(str((x or {}).get("valor", x) if isinstance(x, dict) else x).replace(",", "."))
+        if not 300 < v < 1500:
+            raise ValueError(f"valor fuera de rango: {v}")
+        return v
+    fuentes = [("https://api.hacienda.go.cr/indicadores/tc/dolar", lambda d: (d.get("compra"), d.get("venta"), (d.get("venta") or {}).get("fecha"))),
+               ("https://api.hacienda.go.cr/indicadores/tc", lambda d: ((d.get("dolar") or {}).get("compra"), (d.get("dolar") or {}).get("venta"),
+                                                                       ((d.get("dolar") or {}).get("venta") or {}).get("fecha")))]
+    for url, sacar in fuentes:
+        try:
+            c, v, f = sacar(json.loads(fetch(url, timeout=20).decode("utf-8")))
+            return {"compra": valor(c), "venta": valor(v), "fecha": f}
+        except Exception as e:
+            print(f"  ! Tipo de cambio ({url.rsplit('/', 1)[-1]}): {str(e)[:90]}", file=sys.stderr)
+    return None
+
+
+def botones_datos(clima, dolar):
+    """Dos botones: temperatura mínima/máxima (enlace a la temperatura actual) y tipo de cambio (enlace al detalle)."""
+    ciudades = [c for r in (((clima or {}).get("pronostico") or {}).get("regiones") or []) for c in (r.get("ciudades") or [])]
+    sel = next((c for c in ciudades if str(c[0]).lower().startswith("san jos")), ciudades[0] if ciudades else None)
+    ciudad = sel[0] if sel else "San José"
+    temp = [(f"{_c(sel[2])} °C", "mín"), (f"{_c(sel[1])} °C", "máx")] if sel else [("No disponible", "")]
+    url_t = "https://www.google.com/search?q=" + urllib.parse.quote(f"temperatura actual {ciudad} Costa Rica")
+    f = lambda x: "₡" + f"{x:.2f}".replace(".", ",")
+    cambio = [(f(dolar["compra"]), "compra"), (f(dolar["venta"]), "venta")] if dolar else [("No disponible", "")]
+    def boton(url, et, val, enlace):
+        return (f'<a class="dato" href="{esc(url)}" target="_blank" rel="noopener"><span class="d-et">{esc(et)}</span>'
+                f'<span class="d-val">{"".join(f'<span class="d-fila"><b>{esc(v)}</b> <small>{esc(t)}</small></span>' for v, t in val)}</span><span class="d-lk">{esc(enlace)} ›</span></a>')
+    return ('<div class="datos">' + boton(url_t, f"Temperatura · {ciudad}", temp, "Ver temperatura actual")
+            + boton(URL_DOLAR, "Dólar · BCCR", cambio, "Ver detalle del cambio") + '</div>\n')
+
+
 def tiempo_html(t):
     if not t:
         return ""
@@ -884,7 +925,7 @@ def imagen_mensaje_diaria(d):
     return imagen_y_mensaje_diarios(d)[0]
 
 
-def pagina_edicion(d, secciones, eva, santos, msg, clima=None, preview_key=None):
+def pagina_edicion(d, secciones, eva, santos, msg, clima=None, preview_key=None, dolar=None):
     ymd = f"{d:%Y-%m-%d}"
     larga = fecha_larga(d)
     url = f"{BASE}/ediciones-{ymd}.html"
@@ -905,6 +946,7 @@ def pagina_edicion(d, secciones, eva, santos, msg, clima=None, preview_key=None)
     h += f'<p class="date">{larga}</p>\n<h1>Noticias de hoy, en cinco minutos</h1>\n'
     h += '<p class="lede">Costa Rica, deportes, tecnología, el mundo, el santoral y una dosis de motivación para comenzar el día.</p>\n'
     h += '<p class="meta">Edición diaria · Titulares tomados de los medios citados</p>\n</header>\n'
+    h += botones_datos(clima, dolar)
     if esenciales:
         h += '<div class="essential"><h2>Lo esencial de hoy</h2><ol>'
         for sid, t in esenciales:
@@ -1029,8 +1071,10 @@ def main():
         print(f"  ! Tiempo: {e}", file=sys.stderr)
         clima = None
     print("- El tiempo:", "listo" if clima else "no disponible")
+    dolar = tipo_cambio()
+    print("- Dólar:", f'compra {dolar["compra"]} / venta {dolar["venta"]}' if dolar else "no disponible")
     preview_key = ahora.strftime("%Y%m%d%H%M%S")
-    destino.write_text(pagina_edicion(hoy, secciones, eva, santos, msg, clima, preview_key), encoding="utf-8")
+    destino.write_text(pagina_edicion(hoy, secciones, eva, santos, msg, clima, preview_key, dolar), encoding="utf-8")
     if os.environ.get("AVISO_PATH"):
         Path(os.environ["AVISO_PATH"]).write_text(
             aviso(hoy, secciones, f"{BASE}/ediciones-{ymd}.html", clima, eva, preview_key), encoding="utf-8")
