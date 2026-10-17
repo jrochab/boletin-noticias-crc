@@ -7,7 +7,9 @@ import json
 import os
 import re
 import sys
+import urllib.parse
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
@@ -188,6 +190,96 @@ def reunir(sec, ahora, vistos):
                     vistos.append(palabras(it["titulo"]))
                     elegidos.append(it)
     return elegidos
+
+
+# ---------------------------------------------------------------------------
+# Resumen de cada nota (las primeras líneas). Las fuentes que pasan por Google Noticias
+# (Diario Extra, La Teja, Teletica...) solo entregan el titular, así que se abre la nota
+# del medio y se toma su descripción.
+# ---------------------------------------------------------------------------
+GN_LOTE = "https://news.google.com/_/DotsSplashUi/data/batchexecute"
+GN_CTX = [["X", "X", ["X", "X"], None, None, 1, 1, "US:en", None, 1, None, None, None, None, None, 0, 1],
+          "X", "X", 1, [1, 1, 1], 1, 1, None, 0, 0, None, 0]
+GN_COOKIE = {"Cookie": "CONSENT=YES+cb; SOCS=CAI"}
+
+
+def http_texto(url, data=None, timeout=12, limite=400000, extra=None):
+    h = {"User-Agent": UA, "Accept": "text/html,application/xhtml+xml,*/*;q=0.8", "Accept-Language": "es-CR,es;q=0.9"}
+    h.update(extra or {})
+    req = urllib.request.Request(url, data=data, headers=h)
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return r.read(limite).decode("utf-8", "ignore")
+
+
+def url_real(link):
+    """Convierte un enlace de Google Noticias en la dirección real de la nota. Otros enlaces no cambian."""
+    u = urllib.parse.urlparse(link)
+    partes = u.path.split("/")
+    if u.hostname != "news.google.com" or len(partes) < 2 or partes[-2] not in ("articles", "read"):
+        return link
+    art, qs = partes[-1], urllib.parse.parse_qs(u.query)
+    q = lambda k, d: urllib.parse.quote(qs.get(k, [d])[0], safe="")
+    pagina = http_texto(f"https://news.google.com/rss/articles/{art}?hl={q('hl', 'es-419')}&gl={q('gl', 'CR')}&ceid={q('ceid', 'CR:es-419')}",
+                        extra=GN_COOKIE)
+    sg = re.search(r'data-n-a-sg="([^"]+)"', pagina)
+    ts = re.search(r'data-n-a-ts="([^"]+)"', pagina)
+    if not (sg and ts):
+        raise ValueError("Google Noticias no entregó la firma")
+    interno = ["garturlreq", GN_CTX, art, int(ts.group(1)) if ts.group(1).isdigit() else ts.group(1), sg.group(1)]
+    cuerpo = "f.req=" + urllib.parse.quote(json.dumps([[["Fbv4je", json.dumps(interno, separators=(",", ":")), None, "0"]]],
+                                                      separators=(",", ":")))
+    resp = http_texto(GN_LOTE, data=cuerpo.encode(), extra={**GN_COOKIE, "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8"})
+    cuerpo_resp = resp.split("\n\n", 1)[1] if "\n\n" in resp else resp
+    cuerpo_resp = cuerpo_resp.lstrip()
+    if cuerpo_resp.startswith(")]}'"):
+        cuerpo_resp = cuerpo_resp.split("\n", 1)[1] if "\n" in cuerpo_resp else ""
+    for fila in json.loads(cuerpo_resp):
+        if isinstance(fila, list) and len(fila) >= 3 and fila[0] == "wrb.fr" and isinstance(fila[2], str):
+            carga = json.loads(fila[2])
+            if carga and carga[0] == "garturlres" and str(carga[1]).startswith("http"):
+                return carga[1]
+    raise ValueError("Google Noticias no devolvió la dirección de la nota")
+
+
+def resumen_de_pagina(crudo, titulo):
+    """Descripción de la nota: meta description o, si no hay, el primer párrafo largo."""
+    cand = [_meta(crudo, n) for n in ("og:description", "description", "twitter:description")]
+    for p in re.findall(r"<p\b[^>]*>(.*?)</p>", crudo, re.S | re.I):
+        t = limpiar(p)
+        if len(t) >= 80 and not re.search(r"suscri|cookie|derechos reservados", t, re.I):
+            cand.append(t)
+            break
+    for t in cand:
+        if t and len(t) >= 40 and not t.lower().startswith(titulo.lower()[:40]):
+            return recortar(t)
+    return ""
+
+
+def _resumen_nota(it):
+    try:
+        return resumen_de_pagina(http_texto(url_real(it["link"])), it["titulo"])
+    except Exception as e:
+        print(f"  ! Resumen de {it['fuente']} no disponible: {str(e)[:90]}", file=sys.stderr)
+        return ""
+
+
+def completar_resumenes(secciones):
+    """Rellena el resumen de las notas que no lo traen en el RSS."""
+    faltan = [it for lista in secciones.values() for it in lista if not it["resumen"]]
+    if not faltan:
+        return
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        textos = list(pool.map(_resumen_nota, faltan))
+    # Una misma descripción repetida en varias notas es la genérica del sitio: se descarta.
+    conteo = {}
+    for t in textos:
+        conteo[t[:60]] = conteo.get(t[:60], 0) + 1
+    hechos = 0
+    for it, t in zip(faltan, textos):
+        if t and conteo[t[:60]] == 1:
+            it["resumen"] = t
+            hechos += 1
+    print(f"  Resúmenes completados: {hechos} de {len(faltan)}")
 
 
 # ---------------------------------------------------------------------------
@@ -547,6 +639,7 @@ h2.sec{font-family:var(--serif);font-size:1.7rem;line-height:1.15;margin:0 0 4px
 .tag{display:inline-block;font-size:.85rem;font-weight:600;color:var(--sun);margin:0 0 2px}
 h3{font-family:var(--serif);font-size:1.25rem;line-height:1.25;margin:0 0 6px}
 .item p{margin:0 0 8px}
+.item p.res{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;line-clamp:3;overflow:hidden}
 .src{font-size:.88rem;color:var(--muted)}
 .vacio{color:var(--muted)}
 .saints{list-style:none;padding:0;margin:14px 0 0}
@@ -686,7 +779,7 @@ def item_html(it):
     aviso_pago = ' <span class="tag">Posible muro de pago</span>' if detectar_posible_paywall(it["link"]) else ""
     s = f'<div class="item"><span class="tag">{esc(it["fuente"])}</span>{aviso_pago}<h3><a href="{esc(it["link"])}" style="color:inherit">{esc(it["titulo"])}</a></h3>'
     if it["resumen"]:
-        s += f'<p>{esc(it["resumen"])}</p>'
+        s += f'<p class="res">{esc(it["resumen"])}</p>'
     s += f'<p class="src">Nota completa: <a href="{esc(it["link"])}">{esc(it["fuente"])}</a></p></div>'
     return s
 
@@ -901,6 +994,8 @@ def main():
     if total == 0:
         print("Ninguna fuente respondió; no se publica una edición vacía.", file=sys.stderr)
         sys.exit(1)
+    print("- Resúmenes de las notas")
+    completar_resumenes(secciones)
     eva, santos = evangelio(hoy), santoral(hoy)
     foto_url, msg = imagen_y_mensaje_diarios(hoy)
     foto = descargar_foto(foto_url)
