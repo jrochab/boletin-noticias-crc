@@ -557,6 +557,10 @@ figure.mensaje{margin:16px 0 0}
 figure.mensaje svg{display:block;width:100%;height:auto;border-radius:16px}
 blockquote{font-family:var(--serif);font-size:1.45rem;line-height:1.3;margin:18px 0 6px;padding:0;font-weight:500}
 figcaption{font-size:.85rem;color:var(--muted)}
+.mas{display:block}.js .mas:not(.abierto){display:none}
+.vermas{display:none;margin:20px 0 0}.js .vermas{display:block}
+button.btn-mas{font:inherit;font-weight:600;background:transparent;color:var(--jade);border:2px solid var(--jade);padding:9px 20px;border-radius:999px;cursor:pointer;min-height:44px}
+button.btn-mas:hover{background:var(--mist)}
 .share{margin:18px 0 0;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 button.btn{font:inherit;font-weight:600;background:var(--jade);color:#fff;border:0;padding:11px 20px;border-radius:999px;cursor:pointer;min-height:44px}
 :root[data-theme="dark"] button.btn{color:#0f1a1f}
@@ -599,6 +603,11 @@ if(navigator.clipboard){navigator.clipboard.writeText(location.href).then(functi
 s.textContent='Copie el enlace desde la barra del navegador';});})();</script>"""
 
 
+JS_MAS = """<script>(function(){var bs=document.querySelectorAll('.btn-mas');
+for(var i=0;i<bs.length;i++){(function(b){b.addEventListener('click',function(){var p=document.getElementById(b.getAttribute('data-mas'));if(!p)return;
+var ab=p.classList.toggle('abierto');b.setAttribute('aria-expanded',ab?'true':'false');b.textContent=ab?'Ver menos':b.getAttribute('data-cerrado');});})(bs[i]);}})();</script>"""
+
+
 def cabecera(titulo, desc, url, img, tipo):
     return f"""<!DOCTYPE html>
 <html lang="es">
@@ -624,6 +633,7 @@ def cabecera(titulo, desc, url, img, tipo):
 <meta name="twitter:description" content="{esc(desc)}">
 <meta name="twitter:image" content="{img}">
 {FUENTES_WEB}
+<script>document.documentElement.classList.add('js')</script>
 <style>{CSS}</style>
 </head>
 """
@@ -652,6 +662,22 @@ def detectar_posible_paywall(url):
         return any(p in contenido for p in patrones)
     except Exception:
         return False
+
+
+def bloque_mas(resto_html, uid, etiqueta="Ver más"):
+    """Contenido oculto + botón. Sin JavaScript todo queda visible (el botón no se muestra)."""
+    return (f'<div class="mas" id="mas-{uid}">{resto_html}</div>'
+            f'<p class="vermas"><button type="button" class="btn-mas" data-mas="mas-{uid}" '
+            f'aria-expanded="false" aria-controls="mas-{uid}" data-cerrado="{esc(etiqueta)}">{esc(etiqueta)}</button></p>')
+
+
+def con_ver_mas(bloques, visibles, uid, etiqueta="Ver más ({n})", envolver=None):
+    """Muestra los primeros `visibles` bloques y el resto detrás de un botón 'Ver más'."""
+    envolver = envolver or (lambda partes: "\n".join(partes))
+    if len(bloques) <= visibles:
+        return envolver(bloques)
+    resto = bloques[visibles:]
+    return envolver(bloques[:visibles]) + bloque_mas(envolver(resto), uid, etiqueta.format(n=len(resto)))
 
 
 def item_html(it):
@@ -690,19 +716,21 @@ def tiempo_html(t):
         if p.get("valido"):
             h += f'<p class="src">Válido para: {esc(p["valido"])}. Toque una región para ver el detalle.</p>'
         h += '</div>\n'
+        bloques = []
         for r in p["regiones"]:
             per = r["periodos"]
             resumen = f'Tarde: {per[2]}' if len(per) > 2 and per[2] else ""
-            h += f'<details class="region"><summary><strong>{esc(r["nombre"])}</strong><span>{esc(resumen)}</span></summary><dl>'
+            bl = f'<details class="region"><summary><strong>{esc(r["nombre"])}</strong><span>{esc(resumen)}</span></summary><dl>'
             for nombre, txt in zip(imn.PERIODOS, per):
                 if txt:
-                    h += f'<dt>{nombre}</dt><dd>{esc(txt)}</dd>'
-            h += '</dl>'
+                    bl += f'<dt>{nombre}</dt><dd>{esc(txt)}</dd>'
+            bl += '</dl>'
             if r["ciudades"]:
-                h += '<p class="src">' + " · ".join(f'{esc(c)} {_c(mn)}–{_c(mx)} °C' for c, mx, mn in r["ciudades"]) + '</p>'
-            h += '</details>\n'
+                bl += '<p class="src">' + " · ".join(f'{esc(c)} {_c(mn)}–{_c(mx)} °C' for c, mx, mn in r["ciudades"]) + '</p>'
+            bl += '</details>\n'
+            bloques.append(bl)
         if p.get("comentario"):
-            h += f'<div class="item"><h3>Comentario general</h3><p>{esc(recortar(p["comentario"], 420))}</p></div>\n'
+            bloques.append(f'<div class="item"><h3>Comentario general</h3><p>{esc(recortar(p["comentario"], 420))}</p></div>\n')
         extra = []
         if p.get("sol"):
             extra.append(f'Sol: sale {p["sol"][0]}, se pone {p["sol"][1]}')
@@ -711,7 +739,8 @@ def tiempo_html(t):
         if p.get("fase"):
             extra.append(f'Fase lunar: {p["fase"].lower()}')
         if extra:
-            h += f'<p class="src">San José · {esc(" · ".join(extra))}</p>\n'
+            bloques.append(f'<p class="src">San José · {esc(" · ".join(extra))}</p>\n')
+        h += con_ver_mas(bloques, 3, "tiempo", "Ver más del pronóstico")
     h += f'<p class="src">Fuente: <a href="{imn.URL_PRONOSTICO}">Instituto Meteorológico Nacional</a> · <a href="{imn.URL_AVISOS}">Avisos</a></p></section>\n'
     return h
 
@@ -778,7 +807,7 @@ def pagina_edicion(d, secciones, eva, santos, msg, clima=None, preview_key=None)
     for s in SECCIONES:
         h += f'<section id="{s["id"]}"><h2 class="sec">{esc(s["titulo"])}</h2>\n'
         its = secciones.get(s["id"]) or []
-        h += "\n".join(item_html(i) for i in its) if its else '<p class="vacio">Hoy no hay titulares disponibles en esta sección.</p>'
+        h += con_ver_mas([item_html(i) for i in its], 3, s["id"], "Ver más noticias ({n})") if its else '<p class="vacio">Hoy no hay titulares disponibles en esta sección.</p>'
         h += "</section>\n"
         if s["id"] == "costa-rica":
             h += tiempo_html(clima)
@@ -790,24 +819,26 @@ def pagina_edicion(d, secciones, eva, santos, msg, clima=None, preview_key=None)
     h += f'<h3>{esc(ref)}</h3>'
     if eva.get("lema"):
         h += f'<p>Tema de la homilía: «{esc(eva["lema"])}»</p>'
-    h += f'<p class="src">Lea el Evangelio completo: {enlaces}</p>'
+    mas = f'<p class="src">Lea el Evangelio completo: {enlaces}</p>'
     if eva.get("video"):
-        h += f'<p class="src"><a href="{esc(eva["video"])}">Ver el Evangelio de hoy en vídeo</a></p>'
+        mas += f'<p class="src"><a href="{esc(eva["video"])}">Ver el Evangelio de hoy en vídeo</a></p>'
     if eva.get("texto"):
-        h += '<details class="lectura"><summary>Leer el pasaje aquí</summary>'
-        h += "".join(f'<p><sup>{n}</sup> {esc(t)}</p>' for n, t in eva["texto"])
-        h += '<p class="src">Texto: Reina-Valera 1909 (dominio público). La traducción que se proclama en misa es otra, así que puede haber diferencias.</p></details>'
+        mas += '<details class="lectura"><summary>Leer el pasaje aquí</summary>'
+        mas += "".join(f'<p><sup>{n}</sup> {esc(t)}</p>' for n, t in eva["texto"])
+        mas += '<p class="src">Texto: Reina-Valera 1909 (dominio público). La traducción que se proclama en misa es otra, así que puede haber diferencias.</p></details>'
+    h += bloque_mas(mas, "evangelio", "Ver más del Evangelio")
     h += '</div></section>\n'
     h += f'<section id="santoral"><div class="sant-head">{ICONO_SANTORAL}<h2 class="sec">Santoral del {d.day} de {MESES[d.month - 1]}</h2></div>'
     if santos:
-        h += '<ul class="saints">' + "".join(f'<li><strong>{esc(n)}</strong><span>{esc(r)}</span></li>' for n, r in santos) + '</ul>'
+        h += con_ver_mas([f'<li><strong>{esc(n)}</strong><span>{esc(r)}</span></li>' for n, r in santos], 3, "santoral",
+                         "Ver más santos ({n})", envolver=lambda ps: '<ul class="saints">' + "".join(ps) + '</ul>')
     else:
         h += '<p class="vacio">Consulte el santoral completo del día en el enlace de abajo.</p>'
     h += f'<p class="src" style="margin-top:12px"><a href="https://www.aciprensa.com/calendario/{ymd}">Santoral y lecturas en ACI Prensa</a></p></section>\n'
     h += f'<section id="mensaje"><h2 class="sec">Mensaje positivo</h2><figure class="mensaje"><img src="{esc(img_diaria)}" alt="Fotografía inspiradora del día" loading="lazy" style="display:block;width:100%;height:auto;border-radius:16px"><blockquote>{esc(msg)}</blockquote>'
     h += f'<figcaption>Fotografía de Unsplash · {larga}</figcaption></figure>'
     h += '<div class="share"><button class="btn" id="compartir" type="button">Compartir esta edición</button><span id="copiado" role="status" aria-live="polite"></span></div></section>\n'
-    h += f'<footer><a href="index.html">Volver al archivo de ediciones</a><br>{NOMBRE} · Edición del {larga.lower()}. Los titulares y extractos pertenecen a los medios citados; siga cada enlace para leer la nota completa.</footer>\n</div>\n{JS_COMPARTIR}\n</body>\n</html>\n'
+    h += f'<footer><a href="index.html">Volver al archivo de ediciones</a><br>{NOMBRE} · Edición del {larga.lower()}. Los titulares y extractos pertenecen a los medios citados; siga cada enlace para leer la nota completa.</footer>\n</div>\n{JS_COMPARTIR}\n{JS_MAS}\n</body>\n</html>\n'
     return h
 
 
