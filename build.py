@@ -682,7 +682,7 @@ def imagen_mensaje_diaria(d):
     return imagen_y_mensaje_diarios(d)[0]
 
 
-def pagina_edicion(d, secciones, eva, santos, msg, clima=None):
+def pagina_edicion(d, secciones, eva, santos, msg, clima=None, preview_key=None):
     ymd = f"{d:%Y-%m-%d}"
     larga = fecha_larga(d)
     url = f"{BASE}/ediciones-{ymd}.html"
@@ -694,7 +694,11 @@ def pagina_edicion(d, secciones, eva, santos, msg, clima=None):
         if its:
             esenciales.append((sid, its[0]["titulo"]))
     img_diaria = imagen_mensaje_diaria(d)
-    h = cabecera(titulo, desc, url, img_diaria, "article")
+    # La previsualización usa la gráfica generada para esta edición, con una URL versionada.
+    # Así Telegram puede detectar una imagen nueva aunque se regenere la edición el mismo día.
+    version = preview_key or ymd
+    img_preview = f"{BASE}/ediciones-{ymd}-og.jpg?rev={version}"
+    h = cabecera(titulo, desc, url, img_preview, "article")
     h += f'<body>\n<div class="wrap">\n<header class="top">\n<p class="brand"><a href="index.html" style="text-decoration:none">{NOMBRE}</a> · <a href="index.html">Archivo de ediciones</a></p>\n'
     h += f'<p class="date">{larga}</p>\n<h1>Noticias de hoy, en cinco minutos</h1>\n'
     h += '<p class="lede">Costa Rica, deportes, tecnología, el mundo, el santoral y una dosis de motivación para comenzar el día.</p>\n'
@@ -746,12 +750,12 @@ def pagina_edicion(d, secciones, eva, santos, msg, clima=None):
     return h
 
 
-def pagina_indice(eds):
+def pagina_indice(eds, preview_key=None):
     ult = eds[0]
     d = datetime.strptime(ult["fecha"], "%Y-%m-%d")
     h = cabecera(f"{NOMBRE} · Archivo de ediciones",
                  "Boletín diario de noticias de Costa Rica, deportes, tecnología, el mundo, el Evangelio, el santoral y un mensaje positivo. Archivo de todas las ediciones.",
-                 f"{BASE}/", imagen_mensaje_diaria(d), "website")
+                 f"{BASE}/", f"{BASE}/ediciones-{d:%Y-%m-%d}-og.jpg?rev={preview_key or d.strftime('%Y%m%d')}", "website")
     h += f'<body>\n<div class="wrap">\n<header class="top"><p class="brand">{NOMBRE}</p><p class="date">{fecha_larga(d)}</p>\n'
     h += '<h1>El boletín, edición por edición</h1>\n<p class="lede">Costa Rica, deportes, tecnología, el mundo, el Evangelio del día, el santoral y una dosis de motivación para comenzar el día.</p>\n'
     h += f'<p class="meta"><strong>Edición más reciente:</strong> {fecha_larga(d).lower()}</p>\n'
@@ -818,10 +822,11 @@ def main():
         print(f"  ! Tiempo: {e}", file=sys.stderr)
         clima = None
     print("- El tiempo:", "listo" if clima else "no disponible")
-    destino.write_text(pagina_edicion(hoy, secciones, eva, santos, msg, clima), encoding="utf-8")
+    preview_key = ahora.strftime("%Y%m%d%H%M%S")
+    destino.write_text(pagina_edicion(hoy, secciones, eva, santos, msg, clima, preview_key), encoding="utf-8")
     if os.environ.get("AVISO_PATH"):
         Path(os.environ["AVISO_PATH"]).write_text(
-            aviso(hoy, secciones, f"{BASE}/ediciones-{ymd}.html", clima, eva, ahora.strftime("%Y%m%d%H%M%S")), encoding="utf-8")
+            aviso(hoy, secciones, f"{BASE}/ediciones-{ymd}.html", clima, eva, preview_key), encoding="utf-8")
     sub = f"{NOMBRE} · {hoy.day} de {MESES[hoy.month - 1]} de {hoy.year}"
     imagen_og(ROOT / f"ediciones-{ymd}-og.jpg", msg, sub)
     imagen_og(ROOT / "og-image.jpg", msg, sub)
@@ -833,7 +838,7 @@ def main():
     eds.append({"fecha": ymd, "resumen": recortar(primero, 110)})
     eds.sort(key=lambda e: e["fecha"], reverse=True)
     ruta.write_text(json.dumps(eds, ensure_ascii=False, indent=2), encoding="utf-8")
-    (ROOT / "index.html").write_text(pagina_indice(eds), encoding="utf-8")
+    (ROOT / "index.html").write_text(pagina_indice(eds, preview_key), encoding="utf-8")
     print(f"Listo: {total} notas.")
 
 
