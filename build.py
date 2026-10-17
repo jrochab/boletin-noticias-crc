@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Zona Mixta CRC: genera la edición diaria con titulares de RSS (sin IA, sin costo)."""
 import html
+import io
 from functools import lru_cache
 import json
 import os
@@ -388,10 +389,45 @@ def hexc(h):
     return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
 
 
-def imagen_og(ruta, texto, subtitulo):
-    K = 2
-    W, H = 1200 * K, 630 * K
-    f = 1.5 * K
+def descargar_foto(url):
+    """Descarga la fotografía del mensaje del día. Devuelve una imagen PIL o None si falla."""
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "image/jpeg,image/*,*/*"})
+        with urllib.request.urlopen(req, timeout=40) as r:
+            img = Image.open(io.BytesIO(r.read()))
+            img.load()
+        print("  Foto del mensaje: descargada")
+        return img.convert("RGB")
+    except Exception as e:
+        print(f"  ! Foto del mensaje no disponible ({e}); se usa la ilustración de respaldo", file=sys.stderr)
+        return None
+
+
+def _cubrir(foto, W, H):
+    """Escala y recorta la foto para llenar W x H sin deformarla."""
+    esc_ = max(W / foto.width, H / foto.height)
+    nw, nh = max(W, round(foto.width * esc_)), max(H, round(foto.height * esc_))
+    foto = foto.resize((nw, nh), Image.LANCZOS)
+    x, y = (nw - W) // 2, (nh - H) // 2
+    return foto.crop((x, y, x + W, y + H))
+
+
+def _envolver(d, texto, fnt, ancho):
+    lineas, actual = [], ""
+    for pal in texto.split():
+        prueba = (actual + " " + pal).strip()
+        if actual and d.textlength(prueba, font=fnt) > ancho:
+            lineas.append(actual)
+            actual = pal
+        else:
+            actual = prueba
+    if actual:
+        lineas.append(actual)
+    return lineas
+
+
+def _fondo_dibujado(W, H, f):
+    """Ilustración de respaldo (amanecer con montañas) cuando no hay foto."""
     stops = [(0, hexc("2f6f8f")), (.55, hexc("f2b66d")), (1, hexc("f8dd9b"))]
     img = Image.new("RGB", (W, H))
     px = ImageDraw.Draw(img)
@@ -433,22 +469,47 @@ def imagen_og(ruta, texto, subtitulo):
     d.polygon(P(curva((0, 385), [((200, 355), (400, 385)), ((600, 415), (800, 380))]) + [(800, 420), (0, 420)]), fill=hexc("143a30") + (255,))
     ave = curva((170, 140), [((184, 124), (198, 140))]) + curva((198, 140), [((212, 124), (226, 140))])[1:]
     d.line(P(ave), fill=hexc("14323c") + (255,), width=int(4 * f), joint="curve")
+    return img
 
+
+def imagen_og(ruta, texto, subtitulo, foto=None):
+    """Imagen de vista previa 1200x630: la foto del mensaje (o una ilustración) con el texto completo encima."""
+    K = 2
+    W, H = 1200 * K, 630 * K
+    f = 1.5 * K
+    img = _cubrir(foto, W, H).convert("RGBA") if foto is not None else _fondo_dibujado(W, H, f)
+
+    # Degradado oscuro en la parte baja para que el texto se lea sobre cualquier foto.
     banda = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     bd = ImageDraw.Draw(banda)
-    for yy in range(int(H * .42), H):
-        bd.line([(0, yy), (W, yy)], fill=(8, 28, 24, int(185 * max(0.0, (yy - H * .42) / (H * .58)) ** 1.3)))
+    for yy in range(int(H * .30), H):
+        a = int(215 * max(0.0, (yy - H * .30) / (H * .70)) ** 1.15)
+        bd.line([(0, yy), (W, yy)], fill=(6, 22, 20, a))
     img = Image.alpha_composite(img, banda).convert("RGB")
     d = ImageDraw.Draw(img)
-    grande, chica = _fuente(44 * K), _fuente(26 * K)
 
-    def centrado(t, fnt, y, color):
-        d.text(((W - d.textlength(t, font=fnt)) / 2, y), t, font=fnt, fill=color)
+    # El mensaje se envuelve en varias líneas y se reduce la letra hasta que quepa completo.
+    margen = 70 * K
+    ancho = W - 2 * margen
+    for tam in range(46 * K, 27 * K, -2 * K):
+        grande = _fuente(tam)
+        lineas = _envolver(d, texto, grande, ancho)
+        if len(lineas) <= 4:
+            break
+    chica = _fuente(26 * K)
+    alto_l = int(tam * 1.32)
+    bloque = len(lineas) * alto_l + 20 * K + 26 * K
+    y = H - 44 * K - bloque
 
-    y0 = int(H * .56)
-    for n, linea in enumerate(dos_lineas(texto)):
-        centrado(linea, grande, y0 + n * 66 * K, (255, 255, 255))
-    centrado(subtitulo, chica, y0 + 150 * K, (255, 236, 190))
+    def centrado(t, fnt, yy, color):
+        x = (W - d.textlength(t, font=fnt)) / 2
+        d.text((x + 2 * K, yy + 2 * K), t, font=fnt, fill=(0, 0, 0))   # sombra suave
+        d.text((x, yy), t, font=fnt, fill=color)
+
+    for linea in lineas:
+        centrado(linea, grande, y, (255, 255, 255))
+        y += alto_l
+    centrado(subtitulo, chica, y + 20 * K, (255, 236, 190))
     img.resize((1200, 630), Image.LANCZOS).save(ruta, quality=90, optimize=True)
 
 
@@ -557,7 +618,7 @@ def cabecera(titulo, desc, url, img, tipo):
 <meta property="og:image:type" content="image/jpeg">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="Amanecer sobre montañas con un mensaje positivo.">
+<meta property="og:image:alt" content="Paisaje con el mensaje positivo del día.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="{esc(titulo)}">
 <meta name="twitter:description" content="{esc(desc)}">
@@ -744,7 +805,7 @@ def pagina_edicion(d, secciones, eva, santos, msg, clima=None, preview_key=None)
         h += '<p class="vacio">Consulte el santoral completo del día en el enlace de abajo.</p>'
     h += f'<p class="src" style="margin-top:12px"><a href="https://www.aciprensa.com/calendario/{ymd}">Santoral y lecturas en ACI Prensa</a></p></section>\n'
     h += f'<section id="mensaje"><h2 class="sec">Mensaje positivo</h2><figure class="mensaje"><img src="{esc(img_diaria)}" alt="Fotografía inspiradora del día" loading="lazy" style="display:block;width:100%;height:auto;border-radius:16px"><blockquote>{esc(msg)}</blockquote>'
-    h += f'<figcaption>Fotografía gratuita de Lorem Picsum · {larga}</figcaption></figure>'
+    h += f'<figcaption>Fotografía de Unsplash · {larga}</figcaption></figure>'
     h += '<div class="share"><button class="btn" id="compartir" type="button">Compartir esta edición</button><span id="copiado" role="status" aria-live="polite"></span></div></section>\n'
     h += f'<footer><a href="index.html">Volver al archivo de ediciones</a><br>{NOMBRE} · Edición del {larga.lower()}. Los titulares y extractos pertenecen a los medios citados; siga cada enlace para leer la nota completa.</footer>\n</div>\n{JS_COMPARTIR}\n</body>\n</html>\n'
     return h
@@ -810,7 +871,8 @@ def main():
         print("Ninguna fuente respondió; no se publica una edición vacía.", file=sys.stderr)
         sys.exit(1)
     eva, santos = evangelio(hoy), santoral(hoy)
-    _img_diaria, msg = imagen_y_mensaje_diarios(hoy)
+    foto_url, msg = imagen_y_mensaje_diarios(hoy)
+    foto = descargar_foto(foto_url)
     try:
         eva["texto"] = pasaje_rv(eva.get("ref"))
     except Exception as e:
@@ -828,8 +890,8 @@ def main():
         Path(os.environ["AVISO_PATH"]).write_text(
             aviso(hoy, secciones, f"{BASE}/ediciones-{ymd}.html", clima, eva, preview_key), encoding="utf-8")
     sub = f"{NOMBRE} · {hoy.day} de {MESES[hoy.month - 1]} de {hoy.year}"
-    imagen_og(ROOT / f"ediciones-{ymd}-og.jpg", msg, sub)
-    imagen_og(ROOT / "og-image.jpg", msg, sub)
+    imagen_og(ROOT / f"ediciones-{ymd}-og.jpg", msg, sub, foto)
+    imagen_og(ROOT / "og-image.jpg", msg, sub, foto)
 
     ruta = ROOT / "ediciones.json"
     eds = json.loads(ruta.read_text(encoding="utf-8")) if ruta.exists() else []
