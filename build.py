@@ -655,10 +655,31 @@ def tiempo_html(t):
     return h
 
 
+# Fotografías de paisajes con mensajes escritos para acompañar ese tema.
+# La selección rota por fecha y la misma pareja se usa en la página y en la vista previa.
+MENSAJES_IMAGEN = [
+    ("https://images.unsplash.com/photo-1470252649378-9c29740c9fa8?auto=format&fit=crop&w=1200&h=630&q=85",
+     "Cada amanecer trae una nueva oportunidad. Deja atrás lo que no puedes cambiar y avanza hoy con esperanza."),
+    ("https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1200&h=630&q=85",
+     "La vida también florece en los días difíciles. Ten paciencia, cuida lo bueno y confía en que cada paso cuenta."),
+    ("https://images.unsplash.com/photo-1470770841072-f978cf4d019e?auto=format&fit=crop&w=1200&h=630&q=85",
+     "Aunque el camino tenga curvas, sigue adelante. La calma llega cuando respiras, agradeces y das el siguiente paso."),
+    ("https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&w=1200&h=630&q=85",
+     "Regálate un momento de paz. A veces, detenerse, respirar y mirar lo sencillo nos ayuda a recuperar fuerzas."),
+    ("https://images.unsplash.com/photo-1500534623283-312aade485b7?auto=format&fit=crop&w=1200&h=630&q=85",
+     "No necesitas tener todas las respuestas hoy. Avanza con fe, agradece lo que tienes y permite que la esperanza te guíe."),
+    ("https://images.unsplash.com/photo-1472396961693-142e6e269027?auto=format&fit=crop&w=1200&h=630&q=85",
+     "La belleza nos recuerda que siempre hay motivos para agradecer. Mira este día con un corazón dispuesto a encontrar lo bueno."),
+    ("https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=1200&h=630&q=85",
+     "Las metas grandes se alcanzan paso a paso. No te compares: persevera, conserva la esperanza y celebra cada avance."),
+]
+
+def imagen_y_mensaje_diarios(d):
+    """Devuelve una fotografía y un mensaje positivo relacionados, según el día."""
+    return MENSAJES_IMAGEN[d.toordinal() % len(MENSAJES_IMAGEN)]
+
 def imagen_mensaje_diaria(d):
-    """Fotografía gratuita aleatoria, estable durante el día y distinta al cambiar la fecha."""
-    clave = f"positivo-{d:%Y%m%d}"
-    return f"https://picsum.photos/seed/{clave}/1200/630"
+    return imagen_y_mensaje_diarios(d)[0]
 
 
 def pagina_edicion(d, secciones, eva, santos, msg, clima=None):
@@ -744,7 +765,7 @@ def pagina_indice(eds):
     return h
 
 
-def aviso(d, secciones, url, clima=None, eva=None):
+def aviso(d, secciones, url, clima=None, eva=None, preview_key=None):
     """Texto del mensaje de Telegram (formato HTML de Telegram)."""
     lin = [f"<b>{NOMBRE} 🇨🇷</b>", fecha_larga(d), ""]
     for sid in ("costa-rica", "deportes", "internacional"):
@@ -759,7 +780,8 @@ def aviso(d, secciones, url, clima=None, eva=None):
         lin.append("⚠️ Aviso del IMN: " + html.escape(recortar(av["titulo"], 100), quote=False))
     if eva and eva.get("ref"):
         lin.append("📖 Evangelio: " + html.escape(eva["ref"], quote=False))
-    lin += ["", f'<a href="{url}">Leer la edición completa</a>']
+    enlace_preview = f"{url}?preview={preview_key}" if preview_key else url
+    lin += ["", f'<a href="{enlace_preview}">Leer la edición completa</a>']
     return "\n".join(lin)
 
 
@@ -783,7 +805,8 @@ def main():
     if total == 0:
         print("Ninguna fuente respondió; no se publica una edición vacía.", file=sys.stderr)
         sys.exit(1)
-    eva, santos, msg = evangelio(hoy), santoral(hoy), mensaje(hoy)
+    eva, santos = evangelio(hoy), santoral(hoy)
+    _img_diaria, msg = imagen_y_mensaje_diarios(hoy)
     try:
         eva["texto"] = pasaje_rv(eva.get("ref"))
     except Exception as e:
@@ -798,7 +821,7 @@ def main():
     destino.write_text(pagina_edicion(hoy, secciones, eva, santos, msg, clima), encoding="utf-8")
     if os.environ.get("AVISO_PATH"):
         Path(os.environ["AVISO_PATH"]).write_text(
-            aviso(hoy, secciones, f"{BASE}/ediciones-{ymd}.html", clima, eva), encoding="utf-8")
+            aviso(hoy, secciones, f"{BASE}/ediciones-{ymd}.html", clima, eva, ahora.strftime("%Y%m%d%H%M%S")), encoding="utf-8")
     sub = f"{NOMBRE} · {hoy.day} de {MESES[hoy.month - 1]} de {hoy.year}"
     imagen_og(ROOT / f"ediciones-{ymd}-og.jpg", msg, sub)
     imagen_og(ROOT / "og-image.jpg", msg, sub)
