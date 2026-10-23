@@ -12,16 +12,17 @@
 <meta property="og:url" content="https://jrochab.github.io/boletin-noticias-crc/">
 <meta property="og:title" content="Zona Mixta CRC · Archivo de ediciones">
 <meta property="og:description" content="Boletín diario de noticias de Costa Rica, deportes, tecnología, el mundo, el Evangelio, el santoral y un mensaje positivo. Archivo de todas las ediciones.">
-<meta property="og:image" content="https://jrochab.github.io/boletin-noticias-crc/ediciones-2026-10-22-og.jpg?rev=20261023022238">
+<meta property="og:image" content="https://jrochab.github.io/boletin-noticias-crc/ediciones-2026-10-22-og.jpg?rev=20261023024926">
 <meta property="og:image:type" content="image/jpeg">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="Amanecer sobre montañas con un mensaje positivo.">
+<meta property="og:image:alt" content="Paisaje con el mensaje positivo del día.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Zona Mixta CRC · Archivo de ediciones">
 <meta name="twitter:description" content="Boletín diario de noticias de Costa Rica, deportes, tecnología, el mundo, el Evangelio, el santoral y un mensaje positivo. Archivo de todas las ediciones.">
-<meta name="twitter:image" content="https://jrochab.github.io/boletin-noticias-crc/ediciones-2026-10-22-og.jpg?rev=20261023022238">
+<meta name="twitter:image" content="https://jrochab.github.io/boletin-noticias-crc/ediciones-2026-10-22-og.jpg?rev=20261023024926">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500;6..72,700&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script>document.documentElement.classList.add('js')</script>
 <style>
 :root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
 --ink:#16252d;--muted:#4f6169;--paper:#f4f7f5;--card:#fff;--jade:#1d6b59;--sun:#d98a1f;--mist:#dfe9e5;--line:#cfdcd6;
@@ -34,13 +35,31 @@ body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);f
 a{color:var(--jade);text-underline-offset:3px}
 a:focus-visible,button:focus-visible{outline:3px solid var(--sun);outline-offset:2px;border-radius:4px}
 .wrap{max-width:680px;margin:0 auto;padding:0 20px}
-header.top{padding:18px 0 8px}
-.site-banner{display:block;width:100%;height:auto;aspect-ratio:1536/660;object-fit:cover;border-radius:18px;margin:0 0 16px;box-shadow:0 8px 26px rgba(24,57,96,.10)}
+header.top{padding:28px 0 8px}
 .brand{font-family:var(--serif);font-weight:700;font-size:1.05rem;color:var(--jade);margin:0}
 .date{color:var(--muted);margin:2px 0 0;font-size:.95rem}
 h1{font-family:var(--serif);font-weight:700;font-size:clamp(2.1rem,8vw,3.1rem);line-height:1.08;margin:18px 0 10px;letter-spacing:-.01em}
 .lede{font-size:1.1rem;color:var(--muted);margin:0 0 6px}
 .meta{font-size:.9rem;color:var(--muted);margin:10px 0 0}
+header.top.hero{--hero-a:#0e3a31;--hero-b:#1f735f;position:relative;overflow:hidden;margin:16px 0 4px;padding:30px 24px 26px;border-radius:22px;color:#fff;
+background:linear-gradient(135deg,var(--hero-a),var(--hero-b));box-shadow:0 12px 30px -16px rgba(8,40,33,.6)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) header.top.hero{--hero-a:#0a2822;--hero-b:#175544}}
+:root[data-theme="dark"] header.top.hero{--hero-a:#0a2822;--hero-b:#175544}
+.hero::before,.hero::after{content:"";position:absolute;border-radius:50%;background:rgba(255,255,255,.055);pointer-events:none}
+.hero::before{width:260px;height:260px;top:-120px;right:-80px}.hero::after{width:190px;height:190px;bottom:-95px;left:-60px}
+.hero-txt{position:relative;z-index:1}
+.hero-bar{display:block;width:44px;height:5px;margin-bottom:14px;border-radius:3px;background:#f0b24d}
+.hero .brand{margin:0;color:#fff;font-size:.98rem;letter-spacing:.03em}.hero .brand a{color:#cdeee3}
+.hero h1{margin:12px 0 10px;color:#fff;font-size:clamp(2rem,8.4vw,2.8rem)}
+.hero .lede{margin:0 0 18px;color:#d5e9e2;font-size:1.02rem}
+.hero .meta{margin:12px 0 0;color:#b7d3ca;font-size:.85rem}.hero strong{color:#fff}
+.hero-pill{display:inline-block;margin:0;padding:6px 16px;border:1px solid rgba(255,255,255,.3);border-radius:999px;background:rgba(255,255,255,.1);color:#eef7f3;font-size:.92rem}
+.hero-deco{position:absolute;z-index:0;right:-8px;bottom:-10px;width:112px;opacity:.2}
+.hero .btn{margin:0;background:#fff;color:#0e3a31;border:0}
+@media (min-width:560px){header.top.hero{padding:38px 34px 34px}.hero-txt{max-width:62%}.hero-deco{top:50%;bottom:auto;right:30px;width:150px;opacity:1;transform:translateY(-50%)}}
+.datos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:22px 0 4px}@media (max-width:340px){.datos{grid-template-columns:1fr}}
+a.dato{display:flex;flex-direction:column;gap:3px;padding:14px 16px;border:2px solid var(--jade);border-radius:16px;background:var(--card);color:var(--ink);text-decoration:none}
+a.dato:hover{background:var(--mist)}.d-et{font-size:.78rem;color:var(--muted)}.d-val{display:flex;flex-direction:column;gap:2px}.d-fila{white-space:nowrap}.d-fila b{font-size:1.1rem}.d-fila small{font-size:.78rem;color:var(--muted)}.d-lk{margin-top:4px;font-size:.85rem;font-weight:600;color:var(--jade)}
 .essential{margin:26px 0 8px;padding:18px 20px;background:var(--mist);border-radius:14px}
 .essential h2{margin:0 0 8px;font-size:1.15rem}
 .essential ol{margin:0;padding-left:1.2rem}
@@ -54,6 +73,7 @@ h2.sec{font-family:var(--serif);font-size:1.7rem;line-height:1.15;margin:0 0 4px
 .tag{display:inline-block;font-size:.85rem;font-weight:600;color:var(--sun);margin:0 0 2px}
 h3{font-family:var(--serif);font-size:1.25rem;line-height:1.25;margin:0 0 6px}
 .item p{margin:0 0 8px}
+.item p.res{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;line-clamp:3;overflow:hidden}
 .src{font-size:.88rem;color:var(--muted)}
 .vacio{color:var(--muted)}
 .saints{list-style:none;padding:0;margin:14px 0 0}
@@ -64,6 +84,10 @@ figure.mensaje{margin:16px 0 0}
 figure.mensaje svg{display:block;width:100%;height:auto;border-radius:16px}
 blockquote{font-family:var(--serif);font-size:1.45rem;line-height:1.3;margin:18px 0 6px;padding:0;font-weight:500}
 figcaption{font-size:.85rem;color:var(--muted)}
+.mas{display:block}.js .mas:not(.abierto){display:none}
+.vermas{display:none;margin:20px 0 0}.js .vermas{display:block}
+button.btn-mas{font:inherit;font-weight:600;background:transparent;color:var(--jade);border:2px solid var(--jade);padding:9px 20px;border-radius:999px;cursor:pointer;min-height:44px}
+button.btn-mas:hover{background:var(--mist)}
 .share{margin:18px 0 0;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 button.btn{font:inherit;font-weight:600;background:var(--jade);color:#fff;border:0;padding:11px 20px;border-radius:999px;cursor:pointer;min-height:44px}
 :root[data-theme="dark"] button.btn{color:#0f1a1f}
@@ -79,6 +103,7 @@ button.btn{font:inherit;font-weight:600;background:var(--jade);color:#fff;border
 .region dl{margin:10px 0 4px}.region dt{font-weight:600;margin-top:6px}.region dd{margin:0}
 .aviso{margin:18px 0 0;padding:14px 16px;border-left:4px solid var(--sun);background:var(--mist);border-radius:0 12px 12px 0}
 .aviso h3{margin:2px 0 6px}.aviso p{margin:0 0 6px}
+.evtxt p{margin:12px 0 0;font-size:1.08em;line-height:1.75}.evtxt sup{color:var(--sun);font-weight:600;margin:0 3px 0 5px;font-size:.7em}
 .lectura{margin:10px 0 0;border:1px solid var(--line);border-radius:12px;padding:10px 14px;background:var(--card)}.lectura summary{cursor:pointer;font-weight:600;color:var(--jade)}.lectura p{margin:10px 0 0}.lectura sup{color:var(--sun);font-weight:600;margin-right:4px}
 footer{padding:30px 0 40px;color:var(--muted);font-size:.88rem}
 @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
@@ -86,11 +111,11 @@ footer{padding:30px 0 40px;color:var(--muted);font-size:.88rem}
 </head>
 <body>
 <div class="wrap">
-<header class="top"><img class="site-banner" src="cabecera-boletin.png" alt="Boletín de Noticias CRC: las noticias más importantes de Costa Rica y el mundo"><p class="date">Jueves, 22 de octubre de 2026</p>
+<header class="top hero"><svg class="hero-deco" viewBox="0 0 170 200" aria-hidden="true" focusable="false"><g transform="rotate(9 90 110)"><rect x="52" y="30" width="96" height="132" rx="9" fill="#dfe9e5" opacity=".85"/><g fill="#a9c2b9"><rect x="64" y="52" width="48" height="5" rx="2.5"/><rect x="64" y="68" width="62" height="5" rx="2.5"/><rect x="64" y="84" width="56" height="5" rx="2.5"/><rect x="64" y="100" width="62" height="5" rx="2.5"/></g></g><g transform="rotate(-7 80 100)"><rect x="22" y="22" width="102" height="140" rx="9" fill="#fff"/><rect x="33" y="34" width="80" height="11" rx="3" fill="#f0b24d"/><rect x="33" y="52" width="80" height="44" rx="4" fill="#cfe3dc"/><g fill="#b7cdc6"><rect x="33" y="106" width="64" height="5" rx="2.5"/><rect x="33" y="119" width="80" height="5" rx="2.5"/><rect x="33" y="132" width="72" height="5" rx="2.5"/><rect x="33" y="145" width="50" height="5" rx="2.5"/></g></g></svg><div class="hero-txt"><span class="hero-bar"></span><p class="brand">Zona Mixta CRC</p>
 <h1>El boletín, edición por edición</h1>
 <p class="lede">Costa Rica, deportes, tecnología, el mundo, el Evangelio del día, el santoral y una dosis de motivación para comenzar el día.</p>
-<p class="meta"><strong>Edición más reciente:</strong> jueves, 22 de octubre de 2026</p>
-<p style="margin:18px 0 0"><button class="btn" type="button" onclick="location.href='ediciones-2026-10-22.html'">Leer la edición de hoy</button></p></header>
+<p class="hero-pill">Edición más reciente · jueves, 22 de octubre de 2026</p>
+<p style="margin:18px 0 0"><button class="btn" type="button" onclick="location.href='ediciones-2026-10-22.html'">Leer la edición de hoy</button></p></div></header>
 <section id="ediciones" style="border-bottom:0"><h2 class="sec">Todas las ediciones</h2>
 <a class="edicion" href="ediciones-2026-10-22.html"><strong>Jueves, 22 de octubre de 2026</strong><span><span class="nuevo">Edición más reciente</span> · ¿Tejidos humanos impresos en 3D? La nueva apuesta científica de la UCR - Diario Extra</span></a>
 <a class="edicion" href="ediciones-2026-10-21.html"><strong>Miércoles, 21 de octubre de 2026</strong><span>EMT brinda 46 atenciones en hospitales de Panamá - Diario Extra</span></a>
