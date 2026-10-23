@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """Zona Mixta CRC: genera la edición diaria con titulares de RSS (sin IA, sin costo)."""
 import html
+import io
 from functools import lru_cache
 import json
 import os
 import re
 import sys
+import urllib.parse
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
@@ -190,6 +193,96 @@ def reunir(sec, ahora, vistos):
 
 
 # ---------------------------------------------------------------------------
+# Resumen de cada nota (las primeras líneas). Las fuentes que pasan por Google Noticias
+# (Diario Extra, La Teja, Teletica...) solo entregan el titular, así que se abre la nota
+# del medio y se toma su descripción.
+# ---------------------------------------------------------------------------
+GN_LOTE = "https://news.google.com/_/DotsSplashUi/data/batchexecute"
+GN_CTX = [["X", "X", ["X", "X"], None, None, 1, 1, "US:en", None, 1, None, None, None, None, None, 0, 1],
+          "X", "X", 1, [1, 1, 1], 1, 1, None, 0, 0, None, 0]
+GN_COOKIE = {"Cookie": "CONSENT=YES+cb; SOCS=CAI"}
+
+
+def http_texto(url, data=None, timeout=12, limite=400000, extra=None):
+    h = {"User-Agent": UA, "Accept": "text/html,application/xhtml+xml,*/*;q=0.8", "Accept-Language": "es-CR,es;q=0.9"}
+    h.update(extra or {})
+    req = urllib.request.Request(url, data=data, headers=h)
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return r.read(limite).decode("utf-8", "ignore")
+
+
+def url_real(link):
+    """Convierte un enlace de Google Noticias en la dirección real de la nota. Otros enlaces no cambian."""
+    u = urllib.parse.urlparse(link)
+    partes = u.path.split("/")
+    if u.hostname != "news.google.com" or len(partes) < 2 or partes[-2] not in ("articles", "read"):
+        return link
+    art, qs = partes[-1], urllib.parse.parse_qs(u.query)
+    q = lambda k, d: urllib.parse.quote(qs.get(k, [d])[0], safe="")
+    pagina = http_texto(f"https://news.google.com/rss/articles/{art}?hl={q('hl', 'es-419')}&gl={q('gl', 'CR')}&ceid={q('ceid', 'CR:es-419')}",
+                        extra=GN_COOKIE)
+    sg = re.search(r'data-n-a-sg="([^"]+)"', pagina)
+    ts = re.search(r'data-n-a-ts="([^"]+)"', pagina)
+    if not (sg and ts):
+        raise ValueError("Google Noticias no entregó la firma")
+    interno = ["garturlreq", GN_CTX, art, int(ts.group(1)) if ts.group(1).isdigit() else ts.group(1), sg.group(1)]
+    cuerpo = "f.req=" + urllib.parse.quote(json.dumps([[["Fbv4je", json.dumps(interno, separators=(",", ":")), None, "0"]]],
+                                                      separators=(",", ":")))
+    resp = http_texto(GN_LOTE, data=cuerpo.encode(), extra={**GN_COOKIE, "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8"})
+    cuerpo_resp = resp.split("\n\n", 1)[1] if "\n\n" in resp else resp
+    cuerpo_resp = cuerpo_resp.lstrip()
+    if cuerpo_resp.startswith(")]}'"):
+        cuerpo_resp = cuerpo_resp.split("\n", 1)[1] if "\n" in cuerpo_resp else ""
+    for fila in json.loads(cuerpo_resp):
+        if isinstance(fila, list) and len(fila) >= 3 and fila[0] == "wrb.fr" and isinstance(fila[2], str):
+            carga = json.loads(fila[2])
+            if carga and carga[0] == "garturlres" and str(carga[1]).startswith("http"):
+                return carga[1]
+    raise ValueError("Google Noticias no devolvió la dirección de la nota")
+
+
+def resumen_de_pagina(crudo, titulo):
+    """Descripción de la nota: meta description o, si no hay, el primer párrafo largo."""
+    cand = [_meta(crudo, n) for n in ("og:description", "description", "twitter:description")]
+    for p in re.findall(r"<p\b[^>]*>(.*?)</p>", crudo, re.S | re.I):
+        t = limpiar(p)
+        if len(t) >= 80 and not re.search(r"suscri|cookie|derechos reservados", t, re.I):
+            cand.append(t)
+            break
+    for t in cand:
+        if t and len(t) >= 40 and not t.lower().startswith(titulo.lower()[:40]):
+            return recortar(t)
+    return ""
+
+
+def _resumen_nota(it):
+    try:
+        return resumen_de_pagina(http_texto(url_real(it["link"])), it["titulo"])
+    except Exception as e:
+        print(f"  ! Resumen de {it['fuente']} no disponible: {str(e)[:90]}", file=sys.stderr)
+        return ""
+
+
+def completar_resumenes(secciones):
+    """Rellena el resumen de las notas que no lo traen en el RSS."""
+    faltan = [it for lista in secciones.values() for it in lista if not it["resumen"]]
+    if not faltan:
+        return
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        textos = list(pool.map(_resumen_nota, faltan))
+    # Una misma descripción repetida en varias notas es la genérica del sitio: se descarta.
+    conteo = {}
+    for t in textos:
+        conteo[t[:60]] = conteo.get(t[:60], 0) + 1
+    hechos = 0
+    for it, t in zip(faltan, textos):
+        if t and conteo[t[:60]] == 1:
+            it["resumen"] = t
+            hechos += 1
+    print(f"  Resúmenes completados: {hechos} de {len(faltan)}")
+
+
+# ---------------------------------------------------------------------------
 # Evangelio, santoral y mensaje
 # ---------------------------------------------------------------------------
 LIBROS = {"Mt": "Mateo", "Mc": "Marcos", "Lc": "Lucas", "Jn": "Juan"}
@@ -336,18 +429,36 @@ def evangelios_rv():
     return ev
 
 
+def _capitulo_rv(libro, cap):
+    """Respaldo: descarga solo el capítulo pedido (archivo pequeño) si la Biblia completa no está disponible."""
+    bid = EVANGELIOS_ID[libro]
+    data = json.loads(fetch(f"https://bible.helloao.org/api/spa_r09/{bid}/{cap}.json", timeout=60).decode("utf-8"))
+    ev = _extraer_evangelios({"books": [{"id": bid, "chapters": [data]}]})
+    return (ev.get(libro) or {}).get(str(cap)) or {}
+
+
 def pasaje_rv(ref):
     """Versículos de una cita simple como 'Mateo 22, 1-14'. Devuelve [(n, texto), ...] o None."""
     m = re.fullmatch(r"(Mateo|Marcos|Lucas|Juan) (\d+), (\d+)[a-d]?(?:-(\d+)[a-d]?)?", ref or "")
     if not m:
-        return None
-    ev = evangelios_rv()
-    if not ev:
+        print(f"  ! Texto bíblico: la cita «{ref}» no es de un solo capítulo; se muestran los enlaces", file=sys.stderr)
         return None
     libro, cap, a = m.group(1), m.group(2), int(m.group(3))
     b = int(m.group(4) or a)
-    versos = (ev.get(libro) or {}).get(cap) or {}
+    versos = {}
+    try:
+        ev = evangelios_rv()
+        versos = ((ev or {}).get(libro) or {}).get(cap) or {}
+    except Exception as e:
+        print(f"  ! Texto bíblico (Biblia completa): {e}", file=sys.stderr)
+    if not versos:
+        try:
+            versos = _capitulo_rv(libro, cap)
+            print(f"  Texto bíblico: capítulo {libro} {cap} descargado por separado")
+        except Exception as e:
+            print(f"  ! Texto bíblico (capítulo): {e}", file=sys.stderr)
     out = [(n, versos[str(n)]) for n in range(a, b + 1) if str(n) in versos]
+    print(f"  Texto del Evangelio: {len(out)} versículos")
     return out or None
 
 
@@ -388,10 +499,45 @@ def hexc(h):
     return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
 
 
-def imagen_og(ruta, texto, subtitulo):
-    K = 2
-    W, H = 1200 * K, 630 * K
-    f = 1.5 * K
+def descargar_foto(url):
+    """Descarga la fotografía del mensaje del día. Devuelve una imagen PIL o None si falla."""
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "image/jpeg,image/*,*/*"})
+        with urllib.request.urlopen(req, timeout=40) as r:
+            img = Image.open(io.BytesIO(r.read()))
+            img.load()
+        print("  Foto del mensaje: descargada")
+        return img.convert("RGB")
+    except Exception as e:
+        print(f"  ! Foto del mensaje no disponible ({e}); se usa la ilustración de respaldo", file=sys.stderr)
+        return None
+
+
+def _cubrir(foto, W, H):
+    """Escala y recorta la foto para llenar W x H sin deformarla."""
+    esc_ = max(W / foto.width, H / foto.height)
+    nw, nh = max(W, round(foto.width * esc_)), max(H, round(foto.height * esc_))
+    foto = foto.resize((nw, nh), Image.LANCZOS)
+    x, y = (nw - W) // 2, (nh - H) // 2
+    return foto.crop((x, y, x + W, y + H))
+
+
+def _envolver(d, texto, fnt, ancho):
+    lineas, actual = [], ""
+    for pal in texto.split():
+        prueba = (actual + " " + pal).strip()
+        if actual and d.textlength(prueba, font=fnt) > ancho:
+            lineas.append(actual)
+            actual = pal
+        else:
+            actual = prueba
+    if actual:
+        lineas.append(actual)
+    return lineas
+
+
+def _fondo_dibujado(W, H, f):
+    """Ilustración de respaldo (amanecer con montañas) cuando no hay foto."""
     stops = [(0, hexc("2f6f8f")), (.55, hexc("f2b66d")), (1, hexc("f8dd9b"))]
     img = Image.new("RGB", (W, H))
     px = ImageDraw.Draw(img)
@@ -433,28 +579,65 @@ def imagen_og(ruta, texto, subtitulo):
     d.polygon(P(curva((0, 385), [((200, 355), (400, 385)), ((600, 415), (800, 380))]) + [(800, 420), (0, 420)]), fill=hexc("143a30") + (255,))
     ave = curva((170, 140), [((184, 124), (198, 140))]) + curva((198, 140), [((212, 124), (226, 140))])[1:]
     d.line(P(ave), fill=hexc("14323c") + (255,), width=int(4 * f), joint="curve")
+    return img
 
+
+def imagen_og(ruta, texto, subtitulo, foto=None):
+    """Imagen de vista previa 1200x630: la foto del mensaje (o una ilustración) con el texto completo encima."""
+    K = 2
+    W, H = 1200 * K, 630 * K
+    f = 1.5 * K
+    img = _cubrir(foto, W, H).convert("RGBA") if foto is not None else _fondo_dibujado(W, H, f)
+
+    # Degradado oscuro en la parte baja para que el texto se lea sobre cualquier foto.
     banda = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     bd = ImageDraw.Draw(banda)
-    for yy in range(int(H * .42), H):
-        bd.line([(0, yy), (W, yy)], fill=(8, 28, 24, int(185 * max(0.0, (yy - H * .42) / (H * .58)) ** 1.3)))
+    for yy in range(int(H * .30), H):
+        a = int(215 * max(0.0, (yy - H * .30) / (H * .70)) ** 1.15)
+        bd.line([(0, yy), (W, yy)], fill=(6, 22, 20, a))
     img = Image.alpha_composite(img, banda).convert("RGB")
     d = ImageDraw.Draw(img)
-    grande, chica = _fuente(44 * K), _fuente(26 * K)
 
-    def centrado(t, fnt, y, color):
-        d.text(((W - d.textlength(t, font=fnt)) / 2, y), t, font=fnt, fill=color)
+    # El mensaje se envuelve en varias líneas y se reduce la letra hasta que quepa completo.
+    margen = 70 * K
+    ancho = W - 2 * margen
+    for tam in range(46 * K, 27 * K, -2 * K):
+        grande = _fuente(tam)
+        lineas = _envolver(d, texto, grande, ancho)
+        if len(lineas) <= 4:
+            break
+    chica = _fuente(26 * K)
+    alto_l = int(tam * 1.32)
+    bloque = len(lineas) * alto_l + 20 * K + 26 * K
+    y = H - 44 * K - bloque
 
-    y0 = int(H * .56)
-    for n, linea in enumerate(dos_lineas(texto)):
-        centrado(linea, grande, y0 + n * 66 * K, (255, 255, 255))
-    centrado(subtitulo, chica, y0 + 150 * K, (255, 236, 190))
+    def centrado(t, fnt, yy, color):
+        x = (W - d.textlength(t, font=fnt)) / 2
+        d.text((x + 2 * K, yy + 2 * K), t, font=fnt, fill=(0, 0, 0))   # sombra suave
+        d.text((x, yy), t, font=fnt, fill=color)
+
+    for linea in lineas:
+        centrado(linea, grande, y, (255, 255, 255))
+        y += alto_l
+    centrado(subtitulo, chica, y + 20 * K, (255, 236, 190))
     img.resize((1200, 630), Image.LANCZOS).save(ruta, quality=90, optimize=True)
 
 
 # ---------------------------------------------------------------------------
 # HTML
 # ---------------------------------------------------------------------------
+HERO_SVG = (
+    '<svg class="hero-deco" viewBox="0 0 170 200" aria-hidden="true" focusable="false">'
+    '<g transform="rotate(9 90 110)"><rect x="52" y="30" width="96" height="132" rx="9" fill="#dfe9e5" opacity=".85"/>'
+    '<g fill="#a9c2b9"><rect x="64" y="52" width="48" height="5" rx="2.5"/><rect x="64" y="68" width="62" height="5" rx="2.5"/>'
+    '<rect x="64" y="84" width="56" height="5" rx="2.5"/><rect x="64" y="100" width="62" height="5" rx="2.5"/></g></g>'
+    '<g transform="rotate(-7 80 100)"><rect x="22" y="22" width="102" height="140" rx="9" fill="#fff"/>'
+    '<rect x="33" y="34" width="80" height="11" rx="3" fill="#f0b24d"/>'
+    '<rect x="33" y="52" width="80" height="44" rx="4" fill="#cfe3dc"/>'
+    '<g fill="#b7cdc6"><rect x="33" y="106" width="64" height="5" rx="2.5"/><rect x="33" y="119" width="80" height="5" rx="2.5"/>'
+    '<rect x="33" y="132" width="72" height="5" rx="2.5"/><rect x="33" y="145" width="50" height="5" rx="2.5"/></g></g>'
+    '</svg>')
+
 CSS = """
 :root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
 --ink:#16252d;--muted:#4f6169;--paper:#f4f7f5;--card:#fff;--jade:#1d6b59;--sun:#d98a1f;--mist:#dfe9e5;--line:#cfdcd6;
@@ -467,13 +650,31 @@ body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);f
 a{color:var(--jade);text-underline-offset:3px}
 a:focus-visible,button:focus-visible{outline:3px solid var(--sun);outline-offset:2px;border-radius:4px}
 .wrap{max-width:680px;margin:0 auto;padding:0 20px}
-header.top{padding:18px 0 8px}
-.site-banner{display:block;width:100%;height:auto;aspect-ratio:1536/660;object-fit:cover;border-radius:18px;margin:0 0 16px;box-shadow:0 8px 26px rgba(24,57,96,.10)}
+header.top{padding:28px 0 8px}
 .brand{font-family:var(--serif);font-weight:700;font-size:1.05rem;color:var(--jade);margin:0}
 .date{color:var(--muted);margin:2px 0 0;font-size:.95rem}
 h1{font-family:var(--serif);font-weight:700;font-size:clamp(2.1rem,8vw,3.1rem);line-height:1.08;margin:18px 0 10px;letter-spacing:-.01em}
 .lede{font-size:1.1rem;color:var(--muted);margin:0 0 6px}
 .meta{font-size:.9rem;color:var(--muted);margin:10px 0 0}
+header.top.hero{--hero-a:#0e3a31;--hero-b:#1f735f;position:relative;overflow:hidden;margin:16px 0 4px;padding:30px 24px 26px;border-radius:22px;color:#fff;
+background:linear-gradient(135deg,var(--hero-a),var(--hero-b));box-shadow:0 12px 30px -16px rgba(8,40,33,.6)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) header.top.hero{--hero-a:#0a2822;--hero-b:#175544}}
+:root[data-theme="dark"] header.top.hero{--hero-a:#0a2822;--hero-b:#175544}
+.hero::before,.hero::after{content:"";position:absolute;border-radius:50%;background:rgba(255,255,255,.055);pointer-events:none}
+.hero::before{width:260px;height:260px;top:-120px;right:-80px}.hero::after{width:190px;height:190px;bottom:-95px;left:-60px}
+.hero-txt{position:relative;z-index:1}
+.hero-bar{display:block;width:44px;height:5px;margin-bottom:14px;border-radius:3px;background:#f0b24d}
+.hero .brand{margin:0;color:#fff;font-size:.98rem;letter-spacing:.03em}.hero .brand a{color:#cdeee3}
+.hero h1{margin:12px 0 10px;color:#fff;font-size:clamp(2rem,8.4vw,2.8rem)}
+.hero .lede{margin:0 0 18px;color:#d5e9e2;font-size:1.02rem}
+.hero .meta{margin:12px 0 0;color:#b7d3ca;font-size:.85rem}.hero strong{color:#fff}
+.hero-pill{display:inline-block;margin:0;padding:6px 16px;border:1px solid rgba(255,255,255,.3);border-radius:999px;background:rgba(255,255,255,.1);color:#eef7f3;font-size:.92rem}
+.hero-deco{position:absolute;z-index:0;right:-8px;bottom:-10px;width:112px;opacity:.2}
+.hero .btn{margin:0;background:#fff;color:#0e3a31;border:0}
+@media (min-width:560px){header.top.hero{padding:38px 34px 34px}.hero-txt{max-width:62%}.hero-deco{top:50%;bottom:auto;right:30px;width:150px;opacity:1;transform:translateY(-50%)}}
+.datos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:22px 0 4px}@media (max-width:340px){.datos{grid-template-columns:1fr}}
+a.dato{display:flex;flex-direction:column;gap:3px;padding:14px 16px;border:2px solid var(--jade);border-radius:16px;background:var(--card);color:var(--ink);text-decoration:none}
+a.dato:hover{background:var(--mist)}.d-et{font-size:.78rem;color:var(--muted)}.d-val{display:flex;flex-direction:column;gap:2px}.d-fila{white-space:nowrap}.d-fila b{font-size:1.1rem}.d-fila small{font-size:.78rem;color:var(--muted)}.d-lk{margin-top:4px;font-size:.85rem;font-weight:600;color:var(--jade)}
 .essential{margin:26px 0 8px;padding:18px 20px;background:var(--mist);border-radius:14px}
 .essential h2{margin:0 0 8px;font-size:1.15rem}
 .essential ol{margin:0;padding-left:1.2rem}
@@ -487,6 +688,7 @@ h2.sec{font-family:var(--serif);font-size:1.7rem;line-height:1.15;margin:0 0 4px
 .tag{display:inline-block;font-size:.85rem;font-weight:600;color:var(--sun);margin:0 0 2px}
 h3{font-family:var(--serif);font-size:1.25rem;line-height:1.25;margin:0 0 6px}
 .item p{margin:0 0 8px}
+.item p.res{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;line-clamp:3;overflow:hidden}
 .src{font-size:.88rem;color:var(--muted)}
 .vacio{color:var(--muted)}
 .saints{list-style:none;padding:0;margin:14px 0 0}
@@ -497,6 +699,10 @@ figure.mensaje{margin:16px 0 0}
 figure.mensaje svg{display:block;width:100%;height:auto;border-radius:16px}
 blockquote{font-family:var(--serif);font-size:1.45rem;line-height:1.3;margin:18px 0 6px;padding:0;font-weight:500}
 figcaption{font-size:.85rem;color:var(--muted)}
+.mas{display:block}.js .mas:not(.abierto){display:none}
+.vermas{display:none;margin:20px 0 0}.js .vermas{display:block}
+button.btn-mas{font:inherit;font-weight:600;background:transparent;color:var(--jade);border:2px solid var(--jade);padding:9px 20px;border-radius:999px;cursor:pointer;min-height:44px}
+button.btn-mas:hover{background:var(--mist)}
 .share{margin:18px 0 0;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 button.btn{font:inherit;font-weight:600;background:var(--jade);color:#fff;border:0;padding:11px 20px;border-radius:999px;cursor:pointer;min-height:44px}
 :root[data-theme="dark"] button.btn{color:#0f1a1f}
@@ -512,6 +718,7 @@ button.btn{font:inherit;font-weight:600;background:var(--jade);color:#fff;border
 .region dl{margin:10px 0 4px}.region dt{font-weight:600;margin-top:6px}.region dd{margin:0}
 .aviso{margin:18px 0 0;padding:14px 16px;border-left:4px solid var(--sun);background:var(--mist);border-radius:0 12px 12px 0}
 .aviso h3{margin:2px 0 6px}.aviso p{margin:0 0 6px}
+.evtxt p{margin:12px 0 0;font-size:1.08em;line-height:1.75}.evtxt sup{color:var(--sun);font-weight:600;margin:0 3px 0 5px;font-size:.7em}
 .lectura{margin:10px 0 0;border:1px solid var(--line);border-radius:12px;padding:10px 14px;background:var(--card)}.lectura summary{cursor:pointer;font-weight:600;color:var(--jade)}.lectura p{margin:10px 0 0}.lectura sup{color:var(--sun);font-weight:600;margin-right:4px}
 footer{padding:30px 0 40px;color:var(--muted);font-size:.88rem}
 @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
@@ -539,6 +746,11 @@ if(navigator.clipboard){navigator.clipboard.writeText(location.href).then(functi
 s.textContent='Copie el enlace desde la barra del navegador';});})();</script>"""
 
 
+JS_MAS = """<script>(function(){var bs=document.querySelectorAll('.btn-mas');
+for(var i=0;i<bs.length;i++){(function(b){b.addEventListener('click',function(){var p=document.getElementById(b.getAttribute('data-mas'));if(!p)return;
+var ab=p.classList.toggle('abierto');b.setAttribute('aria-expanded',ab?'true':'false');b.textContent=ab?'Ver menos':b.getAttribute('data-cerrado');});})(bs[i]);}})();</script>"""
+
+
 def cabecera(titulo, desc, url, img, tipo):
     return f"""<!DOCTYPE html>
 <html lang="es">
@@ -558,12 +770,13 @@ def cabecera(titulo, desc, url, img, tipo):
 <meta property="og:image:type" content="image/jpeg">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="Amanecer sobre montañas con un mensaje positivo.">
+<meta property="og:image:alt" content="Paisaje con el mensaje positivo del día.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="{esc(titulo)}">
 <meta name="twitter:description" content="{esc(desc)}">
 <meta name="twitter:image" content="{img}">
 {FUENTES_WEB}
+<script>document.documentElement.classList.add('js')</script>
 <style>{CSS}</style>
 </head>
 """
@@ -594,19 +807,73 @@ def detectar_posible_paywall(url):
         return False
 
 
+def bloque_mas(resto_html, uid, etiqueta="Ver más"):
+    """Contenido oculto + botón. Sin JavaScript todo queda visible (el botón no se muestra)."""
+    return (f'<div class="mas" id="mas-{uid}">{resto_html}</div>'
+            f'<p class="vermas"><button type="button" class="btn-mas" data-mas="mas-{uid}" '
+            f'aria-expanded="false" aria-controls="mas-{uid}" data-cerrado="{esc(etiqueta)}">{esc(etiqueta)}</button></p>')
+
+
+def con_ver_mas(bloques, visibles, uid, etiqueta="Ver más ({n})", envolver=None):
+    """Muestra los primeros `visibles` bloques y el resto detrás de un botón 'Ver más'."""
+    envolver = envolver or (lambda partes: "\n".join(partes))
+    if len(bloques) <= visibles:
+        return envolver(bloques)
+    resto = bloques[visibles:]
+    return envolver(bloques[:visibles]) + bloque_mas(envolver(resto), uid, etiqueta.format(n=len(resto)))
+
+
 def item_html(it):
     # Comprobación orientativa en todas las fuentes. Timeout corto para que
     # una página lenta no detenga la publicación; no se eliminan titulares.
     aviso_pago = ' <span class="tag">Posible muro de pago</span>' if detectar_posible_paywall(it["link"]) else ""
     s = f'<div class="item"><span class="tag">{esc(it["fuente"])}</span>{aviso_pago}<h3><a href="{esc(it["link"])}" style="color:inherit">{esc(it["titulo"])}</a></h3>'
     if it["resumen"]:
-        s += f'<p>{esc(it["resumen"])}</p>'
+        s += f'<p class="res">{esc(it["resumen"])}</p>'
     s += f'<p class="src">Nota completa: <a href="{esc(it["link"])}">{esc(it["fuente"])}</a></p></div>'
     return s
 
 
 def _c(x):
     return f"{x:.1f}".replace(".", ",")
+
+
+URL_DOLAR = "https://www.bccr.fi.cr/indicadores-economicos/tipo-de-cambio"
+
+
+def tipo_cambio():
+    """Tipo de cambio de referencia del dólar (BCCR) vía api.hacienda.go.cr. Devuelve {'compra','venta','fecha'} o None."""
+    def valor(x):
+        v = float(str((x or {}).get("valor", x) if isinstance(x, dict) else x).replace(",", "."))
+        if not 300 < v < 1500:
+            raise ValueError(f"valor fuera de rango: {v}")
+        return v
+    fuentes = [("https://api.hacienda.go.cr/indicadores/tc/dolar", lambda d: (d.get("compra"), d.get("venta"), (d.get("venta") or {}).get("fecha"))),
+               ("https://api.hacienda.go.cr/indicadores/tc", lambda d: ((d.get("dolar") or {}).get("compra"), (d.get("dolar") or {}).get("venta"),
+                                                                       ((d.get("dolar") or {}).get("venta") or {}).get("fecha")))]
+    for url, sacar in fuentes:
+        try:
+            c, v, f = sacar(json.loads(fetch(url, timeout=20).decode("utf-8")))
+            return {"compra": valor(c), "venta": valor(v), "fecha": f}
+        except Exception as e:
+            print(f"  ! Tipo de cambio ({url.rsplit('/', 1)[-1]}): {str(e)[:90]}", file=sys.stderr)
+    return None
+
+
+def botones_datos(clima, dolar):
+    """Dos botones: temperatura mínima/máxima (enlace a la temperatura actual) y tipo de cambio (enlace al detalle)."""
+    ciudades = [c for r in (((clima or {}).get("pronostico") or {}).get("regiones") or []) for c in (r.get("ciudades") or [])]
+    sel = next((c for c in ciudades if str(c[0]).lower().startswith("san jos")), ciudades[0] if ciudades else None)
+    ciudad = sel[0] if sel else "San José"
+    temp = [(f"{_c(sel[2])} °C", "mín"), (f"{_c(sel[1])} °C", "máx")] if sel else [("No disponible", "")]
+    url_t = "https://www.google.com/search?q=" + urllib.parse.quote(f"temperatura actual {ciudad} Costa Rica")
+    f = lambda x: "₡" + f"{x:.2f}".replace(".", ",")
+    cambio = [(f(dolar["compra"]), "compra"), (f(dolar["venta"]), "venta")] if dolar else [("No disponible", "")]
+    def boton(url, et, val, enlace):
+        return (f'<a class="dato" href="{esc(url)}" target="_blank" rel="noopener"><span class="d-et">{esc(et)}</span>'
+                f'<span class="d-val">{"".join(f'<span class="d-fila"><b>{esc(v)}</b> <small>{esc(t)}</small></span>' for v, t in val)}</span><span class="d-lk">{esc(enlace)} ›</span></a>')
+    return ('<div class="datos">' + boton(url_t, f"Temperatura · {ciudad}", temp, "Ver temperatura actual")
+            + boton(URL_DOLAR, "Dólar · BCCR", cambio, "Ver detalle del cambio") + '</div>\n')
 
 
 def tiempo_html(t):
@@ -630,19 +897,21 @@ def tiempo_html(t):
         if p.get("valido"):
             h += f'<p class="src">Válido para: {esc(p["valido"])}. Toque una región para ver el detalle.</p>'
         h += '</div>\n'
+        bloques = []
         for r in p["regiones"]:
             per = r["periodos"]
             resumen = f'Tarde: {per[2]}' if len(per) > 2 and per[2] else ""
-            h += f'<details class="region"><summary><strong>{esc(r["nombre"])}</strong><span>{esc(resumen)}</span></summary><dl>'
+            bl = f'<details class="region"><summary><strong>{esc(r["nombre"])}</strong><span>{esc(resumen)}</span></summary><dl>'
             for nombre, txt in zip(imn.PERIODOS, per):
                 if txt:
-                    h += f'<dt>{nombre}</dt><dd>{esc(txt)}</dd>'
-            h += '</dl>'
+                    bl += f'<dt>{nombre}</dt><dd>{esc(txt)}</dd>'
+            bl += '</dl>'
             if r["ciudades"]:
-                h += '<p class="src">' + " · ".join(f'{esc(c)} {_c(mn)}–{_c(mx)} °C' for c, mx, mn in r["ciudades"]) + '</p>'
-            h += '</details>\n'
+                bl += '<p class="src">' + " · ".join(f'{esc(c)} {_c(mn)}–{_c(mx)} °C' for c, mx, mn in r["ciudades"]) + '</p>'
+            bl += '</details>\n'
+            bloques.append(bl)
         if p.get("comentario"):
-            h += f'<div class="item"><h3>Comentario general</h3><p>{esc(recortar(p["comentario"], 420))}</p></div>\n'
+            bloques.append(f'<div class="item"><h3>Comentario general</h3><p>{esc(recortar(p["comentario"], 420))}</p></div>\n')
         extra = []
         if p.get("sol"):
             extra.append(f'Sol: sale {p["sol"][0]}, se pone {p["sol"][1]}')
@@ -651,7 +920,8 @@ def tiempo_html(t):
         if p.get("fase"):
             extra.append(f'Fase lunar: {p["fase"].lower()}')
         if extra:
-            h += f'<p class="src">San José · {esc(" · ".join(extra))}</p>\n'
+            bloques.append(f'<p class="src">San José · {esc(" · ".join(extra))}</p>\n')
+        h += con_ver_mas(bloques, 3, "tiempo", "Ver más del pronóstico")
     h += f'<p class="src">Fuente: <a href="{imn.URL_PRONOSTICO}">Instituto Meteorológico Nacional</a> · <a href="{imn.URL_AVISOS}">Avisos</a></p></section>\n'
     return h
 
@@ -683,7 +953,7 @@ def imagen_mensaje_diaria(d):
     return imagen_y_mensaje_diarios(d)[0]
 
 
-def pagina_edicion(d, secciones, eva, santos, msg, clima=None, preview_key=None):
+def pagina_edicion(d, secciones, eva, santos, msg, clima=None, preview_key=None, dolar=None):
     ymd = f"{d:%Y-%m-%d}"
     larga = fecha_larga(d)
     url = f"{BASE}/ediciones-{ymd}.html"
@@ -700,9 +970,11 @@ def pagina_edicion(d, secciones, eva, santos, msg, clima=None, preview_key=None)
     version = preview_key or ymd
     img_preview = f"{BASE}/ediciones-{ymd}-og.jpg?rev={version}"
     h = cabecera(titulo, desc, url, img_preview, "article")
-    h += f'<body>\n<div class="wrap">\n<header class="top">\n<a href="index.html" aria-label="Volver al archivo de ediciones"><img class="site-banner" src="cabecera-boletin.png" alt="Boletín de Noticias CRC: las noticias más importantes de Costa Rica y el mundo"></a>\n'
-    h += f'<p class="date">{larga} · <a href="index.html">Archivo de ediciones</a></p>\n'
-    h += '<p class="meta">Edición diaria · Titulares tomados de los medios citados</p>\n</header>\n'
+    h += f'<body>\n<div class="wrap">\n<header class="top hero">{HERO_SVG}<div class="hero-txt"><span class="hero-bar"></span>\n<p class="brand"><a href="index.html" style="text-decoration:none">{NOMBRE}</a> · <a href="index.html">Archivo de ediciones</a></p>\n'
+    h += '<h1>Noticias de hoy, en cinco minutos</h1>\n'
+    h += '<p class="lede">Costa Rica, deportes, tecnología, el mundo, el santoral y una dosis de motivación para comenzar el día.</p>\n'
+    h += f'<p class="hero-pill">{larga}</p>\n<p class="meta">Edición diaria · Titulares tomados de los medios citados</p>\n</div></header>\n'
+    h += botones_datos(clima, dolar)
     if esenciales:
         h += '<div class="essential"><h2>Lo esencial de hoy</h2><ol>'
         for sid, t in esenciales:
@@ -717,7 +989,7 @@ def pagina_edicion(d, secciones, eva, santos, msg, clima=None, preview_key=None)
     for s in SECCIONES:
         h += f'<section id="{s["id"]}"><h2 class="sec">{esc(s["titulo"])}</h2>\n'
         its = secciones.get(s["id"]) or []
-        h += "\n".join(item_html(i) for i in its) if its else '<p class="vacio">Hoy no hay titulares disponibles en esta sección.</p>'
+        h += con_ver_mas([item_html(i) for i in its], 3, s["id"], "Ver más noticias ({n})") if its else '<p class="vacio">Hoy no hay titulares disponibles en esta sección.</p>'
         h += "</section>\n"
         if s["id"] == "costa-rica":
             h += tiempo_html(clima)
@@ -729,24 +1001,26 @@ def pagina_edicion(d, secciones, eva, santos, msg, clima=None, preview_key=None)
     h += f'<h3>{esc(ref)}</h3>'
     if eva.get("lema"):
         h += f'<p>Tema de la homilía: «{esc(eva["lema"])}»</p>'
-    h += f'<p class="src">Lea el Evangelio completo: {enlaces}</p>'
-    if eva.get("video"):
-        h += f'<p class="src"><a href="{esc(eva["video"])}">Ver el Evangelio de hoy en vídeo</a></p>'
+    video = f'<p class="src"><a href="{esc(eva["video"])}">Ver el Evangelio de hoy en vídeo</a></p>' if eva.get("video") else ""
     if eva.get("texto"):
-        h += '<details class="lectura"><summary>Leer el pasaje aquí</summary>'
-        h += "".join(f'<p><sup>{n}</sup> {esc(t)}</p>' for n, t in eva["texto"])
-        h += '<p class="src">Texto: Reina-Valera 1909 (dominio público). La traducción que se proclama en misa es otra, así que puede haber diferencias.</p></details>'
+        # El Evangelio completo queda visible; solo los enlaces y el vídeo van detrás del botón.
+        h += '<div class="evtxt"><p>' + " ".join(f'<sup>{n}</sup>{esc(t)}' for n, t in eva["texto"]) + '</p></div>'
+        h += '<p class="src">Texto: Reina-Valera 1909 (dominio público). La traducción que se proclama en misa es otra, así que puede haber diferencias.</p>'
+        h += bloque_mas(f'<p class="src">Evangelio completo en: {enlaces}</p>' + video, "evangelio", "Ver más fuentes")
+    else:
+        h += f'<p>No se pudo cargar el texto aquí. Lea el Evangelio completo en: {enlaces}</p>' + video
     h += '</div></section>\n'
     h += f'<section id="santoral"><div class="sant-head">{ICONO_SANTORAL}<h2 class="sec">Santoral del {d.day} de {MESES[d.month - 1]}</h2></div>'
     if santos:
-        h += '<ul class="saints">' + "".join(f'<li><strong>{esc(n)}</strong><span>{esc(r)}</span></li>' for n, r in santos) + '</ul>'
+        h += con_ver_mas([f'<li><strong>{esc(n)}</strong><span>{esc(r)}</span></li>' for n, r in santos], 3, "santoral",
+                         "Ver más santos ({n})", envolver=lambda ps: '<ul class="saints">' + "".join(ps) + '</ul>')
     else:
         h += '<p class="vacio">Consulte el santoral completo del día en el enlace de abajo.</p>'
     h += f'<p class="src" style="margin-top:12px"><a href="https://www.aciprensa.com/calendario/{ymd}">Santoral y lecturas en ACI Prensa</a></p></section>\n'
     h += f'<section id="mensaje"><h2 class="sec">Mensaje positivo</h2><figure class="mensaje"><img src="{esc(img_diaria)}" alt="Fotografía inspiradora del día" loading="lazy" style="display:block;width:100%;height:auto;border-radius:16px"><blockquote>{esc(msg)}</blockquote>'
-    h += f'<figcaption>Fotografía gratuita de Lorem Picsum · {larga}</figcaption></figure>'
+    h += f'<figcaption>Fotografía de Unsplash · {larga}</figcaption></figure>'
     h += '<div class="share"><button class="btn" id="compartir" type="button">Compartir esta edición</button><span id="copiado" role="status" aria-live="polite"></span></div></section>\n'
-    h += f'<footer><a href="index.html">Volver al archivo de ediciones</a><br>{NOMBRE} · Edición del {larga.lower()}. Los titulares y extractos pertenecen a los medios citados; siga cada enlace para leer la nota completa.</footer>\n</div>\n{JS_COMPARTIR}\n</body>\n</html>\n'
+    h += f'<footer><a href="index.html">Volver al archivo de ediciones</a><br>{NOMBRE} · Edición del {larga.lower()}. Los titulares y extractos pertenecen a los medios citados; siga cada enlace para leer la nota completa.</footer>\n</div>\n{JS_COMPARTIR}\n{JS_MAS}\n</body>\n</html>\n'
     return h
 
 
@@ -756,10 +1030,10 @@ def pagina_indice(eds, preview_key=None):
     h = cabecera(f"{NOMBRE} · Archivo de ediciones",
                  "Boletín diario de noticias de Costa Rica, deportes, tecnología, el mundo, el Evangelio, el santoral y un mensaje positivo. Archivo de todas las ediciones.",
                  f"{BASE}/", f"{BASE}/ediciones-{d:%Y-%m-%d}-og.jpg?rev={preview_key or d.strftime('%Y%m%d')}", "website")
-    h += f'<body>\n<div class="wrap">\n<header class="top"><img class="site-banner" src="cabecera-boletin.png" alt="Boletín de Noticias CRC: las noticias más importantes de Costa Rica y el mundo"><p class="date">{fecha_larga(d)}</p>\n'
+    h += f'<body>\n<div class="wrap">\n<header class="top hero">{HERO_SVG}<div class="hero-txt"><span class="hero-bar"></span><p class="brand">{NOMBRE}</p>\n'
     h += '<h1>El boletín, edición por edición</h1>\n<p class="lede">Costa Rica, deportes, tecnología, el mundo, el Evangelio del día, el santoral y una dosis de motivación para comenzar el día.</p>\n'
-    h += f'<p class="meta"><strong>Edición más reciente:</strong> {fecha_larga(d).lower()}</p>\n'
-    h += f'<p style="margin:18px 0 0"><button class="btn" type="button" onclick="location.href=\'ediciones-{ult["fecha"]}.html\'">Leer la edición de hoy</button></p></header>\n'
+    h += f'<p class="hero-pill">Edición más reciente · {fecha_larga(d).lower()}</p>\n'
+    h += f'<p style="margin:18px 0 0"><button class="btn" type="button" onclick="location.href=\'ediciones-{ult["fecha"]}.html\'">Leer la edición de hoy</button></p></div></header>\n'
     h += '<section id="ediciones" style="border-bottom:0"><h2 class="sec">Todas las ediciones</h2>\n'
     for n, e in enumerate(eds):
         dd = datetime.strptime(e["fecha"], "%Y-%m-%d")
@@ -809,8 +1083,11 @@ def main():
     if total == 0:
         print("Ninguna fuente respondió; no se publica una edición vacía.", file=sys.stderr)
         sys.exit(1)
+    print("- Resúmenes de las notas")
+    completar_resumenes(secciones)
     eva, santos = evangelio(hoy), santoral(hoy)
-    _img_diaria, msg = imagen_y_mensaje_diarios(hoy)
+    foto_url, msg = imagen_y_mensaje_diarios(hoy)
+    foto = descargar_foto(foto_url)
     try:
         eva["texto"] = pasaje_rv(eva.get("ref"))
     except Exception as e:
@@ -822,14 +1099,16 @@ def main():
         print(f"  ! Tiempo: {e}", file=sys.stderr)
         clima = None
     print("- El tiempo:", "listo" if clima else "no disponible")
+    dolar = tipo_cambio()
+    print("- Dólar:", f'compra {dolar["compra"]} / venta {dolar["venta"]}' if dolar else "no disponible")
     preview_key = ahora.strftime("%Y%m%d%H%M%S")
-    destino.write_text(pagina_edicion(hoy, secciones, eva, santos, msg, clima, preview_key), encoding="utf-8")
+    destino.write_text(pagina_edicion(hoy, secciones, eva, santos, msg, clima, preview_key, dolar), encoding="utf-8")
     if os.environ.get("AVISO_PATH"):
         Path(os.environ["AVISO_PATH"]).write_text(
             aviso(hoy, secciones, f"{BASE}/ediciones-{ymd}.html", clima, eva, preview_key), encoding="utf-8")
     sub = f"{NOMBRE} · {hoy.day} de {MESES[hoy.month - 1]} de {hoy.year}"
-    imagen_og(ROOT / f"ediciones-{ymd}-og.jpg", msg, sub)
-    imagen_og(ROOT / "og-image.jpg", msg, sub)
+    imagen_og(ROOT / f"ediciones-{ymd}-og.jpg", msg, sub, foto)
+    imagen_og(ROOT / "og-image.jpg", msg, sub, foto)
 
     ruta = ROOT / "ediciones.json"
     eds = json.loads(ruta.read_text(encoding="utf-8")) if ruta.exists() else []
