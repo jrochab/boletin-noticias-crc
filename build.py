@@ -509,11 +509,70 @@ def pasaje_rv(ref):
     return out or None
 
 
+def _atributo_html(tag_html, nombres):
+    """Obtiene el primer atributo HTML disponible, sin depender de su orden."""
+    for nombre in nombres:
+        m = re.search(r'\b' + re.escape(nombre) + r'\s*=\s*(["\'])(.*?)\1', tag_html, re.I | re.S)
+        if m:
+            valor = html.unescape(m.group(2)).strip()
+            if valor:
+                return valor
+    return ""
+
+
+def _imagen_de_pagina(url, base_url):
+    """Busca la imagen principal declarada por la página del santo."""
+    if not url:
+        return ""
+    try:
+        pagina = urllib.parse.urljoin(base_url, url)
+        texto = fetch(pagina, timeout=18).decode("utf-8", "replace")
+        for patron in (
+            r'<meta[^>]+(?:property|name)=["\']og:image["\'][^>]*>',
+            r'<meta[^>]+(?:name|property)=["\']twitter:image["\'][^>]*>',
+        ):
+            m = re.search(patron, texto, re.I | re.S)
+            if m:
+                imagen = _atributo_html(m.group(0), ("content",))
+                if imagen:
+                    return urllib.parse.urljoin(pagina, imagen)
+    except Exception as e:
+        print(f"  ! No se pudo consultar imagen de la página del santo: {e}", file=sys.stderr)
+    return ""
+
+
+def _guardar_imagen_santoral(url, d):
+    """Descarga la imagen al propio sitio para evitar bloqueos de imágenes externas."""
+    if not url:
+        return ""
+    try:
+        url = urllib.parse.urljoin("https://www.santopedia.com/", url)
+        req = urllib.request.Request(url, headers={
+            "User-Agent": UA,
+            "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+            "Referer": "https://www.santopedia.com/",
+        })
+        with urllib.request.urlopen(req, timeout=20) as r:
+            datos = r.read(8 * 1024 * 1024 + 1)
+        if not datos or len(datos) > 8 * 1024 * 1024:
+            return ""
+        imagen = Image.open(io.BytesIO(datos)).convert("RGB")
+        imagen.thumbnail((700, 700), Image.LANCZOS)
+        carpeta = ROOT / "assets"
+        carpeta.mkdir(parents=True, exist_ok=True)
+        nombre = f"santoral-{d.month:02d}-{d.day:02d}.jpg"
+        imagen.save(carpeta / nombre, "JPEG", quality=88, optimize=True)
+        return f"assets/{nombre}"
+    except Exception as e:
+        print(f"  ! No se pudo guardar la imagen del santoral: {e}", file=sys.stderr)
+        return ""
+
+
 def santoral(d):
     """Santopedia es la fuente principal; santoral.json queda como respaldo local.
 
-    Devuelve (celebraciones, imagen_url). Se respetan los textos entregados por
-    Santopedia y se enlaza siempre a la fuente, tal como solicita el proveedor.
+    Devuelve (celebraciones, imagen_local). Las imágenes se descargan al sitio
+    para que no dependan de permisos de hotlink del servidor de origen.
     """
     respaldo = []
     try:
@@ -523,7 +582,8 @@ def santoral(d):
         print(f"  ! Santoral local no disponible: {e}", file=sys.stderr)
 
     try:
-        raiz = ET.fromstring(fetch("https://www.santopedia.com/widget.rss", timeout=25))
+        feed_url = "https://www.santopedia.com/widget.rss"
+        raiz = ET.fromstring(fetch(feed_url, timeout=25))
         items = []
         fechas_explicitas = []
         for nodo in raiz.iter():
@@ -533,11 +593,12 @@ def santoral(d):
             for c in nodo:
                 hijos.setdefault(c.tag.split("}")[-1].lower(), c)
             titulo = limpiar(hijos["title"].text or "") if "title" in hijos else ""
-            descripcion = ""
+            descripcion_raw = ""
             for k in ("description", "summary", "content", "encoded"):
                 if k in hijos and (hijos[k].text or "").strip():
-                    descripcion = limpiar(hijos[k].text)
+                    descripcion_raw = hijos[k].text or ""
                     break
+            descripcion = limpiar(descripcion_raw)
             fecha_item = None
             for k in ("pubdate", "published", "updated", "date"):
                 if k in hijos and hijos[k].text:
@@ -545,30 +606,50 @@ def santoral(d):
                     if fecha_item:
                         fechas_explicitas.append(fecha_item.astimezone(TZ).date())
                         break
+            enlace = ""
+            if "link" in hijos:
+                enlace = (hijos["link"].text or hijos["link"].get("href") or "").strip()
+            if not enlace:
+                for c in nodo:
+                    if c.tag.split("}")[-1].lower() == "link" and c.get("href"):
+                        enlace = c.get("href")
+                        break
             imagen = ""
+            # RSS/Media RSS/Atom: media:thumbnail, media:content, enclosure y enlaces image.
             for c in nodo.iter():
                 tag = c.tag.split("}")[-1].lower()
-                if tag in ("thumbnail", "content", "enclosure"):
-                    url_img = (c.get("url") or "").strip()
-                    tipo = (c.get("type") or "").lower()
-                    if url_img.startswith("https://") and (tag != "enclosure" or tipo.startswith("image/")):
-                        imagen = url_img
+                tipo = (c.get("type") or "").lower()
+                url_img = (c.get("url") or c.get("href") or "").strip()
+                if tag in ("thumbnail", "content", "enclosure") and url_img:
+                    if tag != "enclosure" or not tipo or tipo.startswith("image/"):
+                        imagen = urllib.parse.urljoin(feed_url, url_img)
                         break
-            if not imagen and descripcion:
-                mimg = re.search(r'<img[^>]+src=["\']([^"\']+)', (hijos.get("description").text or "") if hijos.get("description") is not None else "", re.I)
-                if mimg and mimg.group(1).startswith("https://"):
-                    imagen = mimg.group(1)
+            # Busca imágenes incrustadas en description/content:encoded, incluyendo lazy-load.
+            if not imagen and descripcion_raw:
+                for etiqueta in re.findall(r'<img\b[^>]*>', descripcion_raw, re.I | re.S):
+                    candidata = _atributo_html(etiqueta, ("src", "data-src", "data-original", "srcset"))
+                    if candidata:
+                        candidata = candidata.split(",")[0].strip().split(" ")[0]
+                        if candidata.startswith("//"):
+                            candidata = "https:" + candidata
+                        if candidata.startswith(("http://", "https://", "/")):
+                            imagen = urllib.parse.urljoin(feed_url, candidata)
+                            break
             if titulo and titulo.lower() not in ("santoral", "santoral del día", "santos del día"):
-                items.append((titulo, descripcion or "", imagen, fecha_item))
+                items.append((titulo, descripcion, imagen, fecha_item, enlace))
 
-        # Si el RSS fecha sus entradas, solo se aceptan las correspondientes al día solicitado.
         if fechas_explicitas:
-            items = [x for x in items if x[3] and x[3].astimezone(TZ).date() == (d.date() if isinstance(d, datetime) else d)]
+            fecha_objetivo = d.date() if isinstance(d, datetime) else d
+            items = [x for x in items if x[3] and x[3].astimezone(TZ).date() == fecha_objetivo]
         if items:
-            santos = [(n, r) for n, r, _, _ in items]
-            imagen = next((im for _, _, im, _ in items if im), "")
-            print(f"  Santoral: {len(santos)} celebración(es) obtenida(s) de Santopedia")
-            return santos, imagen
+            santos = [(n, r) for n, r, _, _, _ in items]
+            imagen_url = next((im for _, _, im, _, _ in items if im), "")
+            if not imagen_url:
+                enlace = next((ln for _, _, _, _, ln in items if ln), "")
+                imagen_url = _imagen_de_pagina(enlace, feed_url)
+            imagen_local = _guardar_imagen_santoral(imagen_url, d)
+            print(f"  Santoral: {len(santos)} celebración(es) obtenida(s) de Santopedia; imagen {'guardada' if imagen_local else 'no disponible'}")
+            return santos, imagen_local
         print("  ! Santopedia no devolvió celebraciones para esta fecha; se usa santoral.json", file=sys.stderr)
     except Exception as e:
         print(f"  ! Santopedia no disponible ({e}); se usa santoral.json", file=sys.stderr)
@@ -1121,7 +1202,7 @@ def pagina_edicion(d, secciones, eva, santos, msg, clima=None, preview_key=None,
     h += '</div></section>\n'
     h += f'<section id="santoral"><div class="sant-head">{ICONO_SANTORAL}<h2 class="sec">Santoral del {d.day} de {MESES[d.month - 1]}</h2></div>'
     if santos_imagen:
-        h += f'<div style="display:flex;align-items:center;gap:12px;margin:12px 0 16px"><img src="{esc(santos_imagen)}" alt="Imagen del santo del día, facilitada por Santopedia" loading="lazy" referrerpolicy="no-referrer" style="width:76px;height:76px;object-fit:cover;border-radius:12px;border:1px solid #e5e7eb"><span class="src">Imagen: Santopedia</span></div>'
+        h += f'<div style="display:flex;align-items:center;gap:12px;margin:12px 0 16px"><img src="{esc(santos_imagen)}" alt="Imagen del santo del día, facilitada por Santopedia" loading="lazy" referrerpolicy="no-referrer" style="width:76px;height:76px;object-fit:cover;border-radius:12px;border:1px solid #e5e7eb"><span class="src">Imagen del santo</span></div>'
     elif santos:
         h += '<div aria-hidden="true" style="display:inline-flex;align-items:center;justify-content:center;width:64px;height:64px;margin:10px 0 14px;border-radius:50%;background:#f4efe3;color:#80652c;font-size:34px">✝</div>'
     if santos:
