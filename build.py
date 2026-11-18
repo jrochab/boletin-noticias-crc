@@ -175,7 +175,7 @@ def duplicado(titulo, vistos):
 
 # Filtros editoriales para evitar titulares de otra temática o claramente en otro idioma.
 PALABRAS_ES = set("el la los las un una unos unas de del al y o u en por para con sin sobre entre que como cuando donde quien quienes cual cuales se su sus es son fue han ha hay mas menos no si pero tras ante desde hasta durante este esta estos estas".split())
-MARCADORES_OTROS_IDIOMAS = set("the and for with from this that have has was were will says said after before dans pour avec les des une est sont sur aux cette ces le la un une et der die das und mit von fur ist sind nach vor ein eine".split())
+MARCADORES_OTROS_IDIOMAS = set("the and for with from this that have has was were will says said after before outage hits global world microsoft services service major users around their its into amid over says report reports warns warning killed death deal talks vote election latest breaking update live watch business economy country countries government court police strike crisis clash says said according while as is are has had been being down due outages dans pour avec les des une est sont sur aux cette ces le la un une et der die das und mit von fur ist sind nach vor ein eine".split())
 TEMAS_CULTURA = (
     "cultura", "cultural", "arte", "artista", "artistas", "museo", "exposicion",
     "pintura", "pintor", "escultura", "teatro", "danza", "ballet", "musica",
@@ -220,6 +220,9 @@ def reunir(sec, ahora, vistos):
         recientes = [i for i in items if i["fecha"] and i["fecha"] >= ahora - timedelta(hours=40)]
         if sec["id"] == "cultura":
             validos = [i for i in recientes if _es_probablemente_espanol(i) and _es_cultura(i)]
+        elif sec["id"] == "internacional":
+            # Las fuentes/agregadores pueden devolver por error artículos en inglés.
+            validos = [i for i in recientes if _es_probablemente_espanol(i)]
         else:
             validos = recientes
         # No se rellenan secciones con noticias antiguas si no hay publicaciones recientes.
