@@ -510,8 +510,70 @@ def pasaje_rv(ref):
 
 
 def santoral(d):
-    datos = json.loads((ROOT / "santoral.json").read_text(encoding="utf-8"))
-    return datos.get(f"{d.month:02d}-{d.day:02d}", [])
+    """Santopedia es la fuente principal; santoral.json queda como respaldo local.
+
+    Devuelve (celebraciones, imagen_url). Se respetan los textos entregados por
+    Santopedia y se enlaza siempre a la fuente, tal como solicita el proveedor.
+    """
+    respaldo = []
+    try:
+        datos = json.loads((ROOT / "santoral.json").read_text(encoding="utf-8"))
+        respaldo = datos.get(f"{d.month:02d}-{d.day:02d}", [])
+    except Exception as e:
+        print(f"  ! Santoral local no disponible: {e}", file=sys.stderr)
+
+    try:
+        raiz = ET.fromstring(fetch("https://www.santopedia.com/widget.rss", timeout=25))
+        items = []
+        fechas_explicitas = []
+        for nodo in raiz.iter():
+            if nodo.tag.split("}")[-1].lower() not in ("item", "entry"):
+                continue
+            hijos = {}
+            for c in nodo:
+                hijos.setdefault(c.tag.split("}")[-1].lower(), c)
+            titulo = limpiar(hijos["title"].text or "") if "title" in hijos else ""
+            descripcion = ""
+            for k in ("description", "summary", "content", "encoded"):
+                if k in hijos and (hijos[k].text or "").strip():
+                    descripcion = limpiar(hijos[k].text)
+                    break
+            fecha_item = None
+            for k in ("pubdate", "published", "updated", "date"):
+                if k in hijos and hijos[k].text:
+                    fecha_item = parse_fecha(hijos[k].text)
+                    if fecha_item:
+                        fechas_explicitas.append(fecha_item.astimezone(TZ).date())
+                        break
+            imagen = ""
+            for c in nodo.iter():
+                tag = c.tag.split("}")[-1].lower()
+                if tag in ("thumbnail", "content", "enclosure"):
+                    url_img = (c.get("url") or "").strip()
+                    tipo = (c.get("type") or "").lower()
+                    if url_img.startswith("https://") and (tag != "enclosure" or tipo.startswith("image/")):
+                        imagen = url_img
+                        break
+            if not imagen and descripcion:
+                mimg = re.search(r'<img[^>]+src=["\']([^"\']+)', (hijos.get("description").text or "") if hijos.get("description") is not None else "", re.I)
+                if mimg and mimg.group(1).startswith("https://"):
+                    imagen = mimg.group(1)
+            if titulo and titulo.lower() not in ("santoral", "santoral del día", "santos del día"):
+                items.append((titulo, descripcion or "", imagen, fecha_item))
+
+        # Si el RSS fecha sus entradas, solo se aceptan las correspondientes al día solicitado.
+        if fechas_explicitas:
+            items = [x for x in items if x[3] and x[3].astimezone(TZ).date() == (d.date() if isinstance(d, datetime) else d)]
+        if items:
+            santos = [(n, r) for n, r, _, _ in items]
+            imagen = next((im for _, _, im, _ in items if im), "")
+            print(f"  Santoral: {len(santos)} celebración(es) obtenida(s) de Santopedia")
+            return santos, imagen
+        print("  ! Santopedia no devolvió celebraciones para esta fecha; se usa santoral.json", file=sys.stderr)
+    except Exception as e:
+        print(f"  ! Santopedia no disponible ({e}); se usa santoral.json", file=sys.stderr)
+
+    return respaldo, ""
 
 
 def mensaje(d):
@@ -1000,7 +1062,7 @@ def imagen_mensaje_diaria(d):
     return imagen_y_mensaje_diarios(d)[0]
 
 
-def pagina_edicion(d, secciones, eva, santos, msg, clima=None, preview_key=None, dolar=None):
+def pagina_edicion(d, secciones, eva, santos, msg, clima=None, preview_key=None, dolar=None, santos_imagen=""):
     ymd = f"{d:%Y-%m-%d}"
     larga = fecha_larga(d)
     url = f"{BASE}/ediciones-{ymd}.html"
@@ -1058,12 +1120,16 @@ def pagina_edicion(d, secciones, eva, santos, msg, clima=None, preview_key=None,
         h += f'<p>No se pudo cargar el texto aquí. Lea el Evangelio completo en: {enlaces}</p>' + video
     h += '</div></section>\n'
     h += f'<section id="santoral"><div class="sant-head">{ICONO_SANTORAL}<h2 class="sec">Santoral del {d.day} de {MESES[d.month - 1]}</h2></div>'
+    if santos_imagen:
+        h += f'<div style="display:flex;align-items:center;gap:12px;margin:12px 0 16px"><img src="{esc(santos_imagen)}" alt="Imagen del santo del día, facilitada por Santopedia" loading="lazy" referrerpolicy="no-referrer" style="width:76px;height:76px;object-fit:cover;border-radius:12px;border:1px solid #e5e7eb"><span class="src">Imagen: Santopedia</span></div>'
+    elif santos:
+        h += '<div aria-hidden="true" style="display:inline-flex;align-items:center;justify-content:center;width:64px;height:64px;margin:10px 0 14px;border-radius:50%;background:#f4efe3;color:#80652c;font-size:34px">✝</div>'
     if santos:
         h += con_ver_mas([f'<li><strong>{esc(n)}</strong><span>{esc(r)}</span></li>' for n, r in santos], 3, "santoral",
                          "Ver más santos ({n})", envolver=lambda ps: '<ul class="saints">' + "".join(ps) + '</ul>')
     else:
         h += '<p class="vacio">Consulte el santoral completo del día en el enlace de abajo.</p>'
-    h += f'<p class="src" style="margin-top:12px"><a href="https://www.aciprensa.com/calendario/{ymd}">Santoral y lecturas en ACI Prensa</a></p></section>\n'
+    h += f'<p class="src" style="margin-top:12px"><a href="https://www.santopedia.com/">Fuente del santoral: Santopedia</a> · <a href="https://www.aciprensa.com/calendario/{ymd}">Calendario y lecturas en ACI Prensa</a></p></section>\n'
     h += f'<section id="mensaje"><h2 class="sec">Mensaje positivo</h2><figure class="mensaje"><img src="{esc(img_diaria)}" alt="Fotografía inspiradora del día" loading="lazy" style="display:block;width:100%;height:auto;border-radius:16px"><blockquote>{esc(msg)}</blockquote>'
     h += f'<figcaption>Fotografía de Unsplash · {larga}</figcaption></figure>'
     h += '<div class="share"><button class="btn" id="compartir" type="button">Compartir esta edición</button><span id="copiado" role="status" aria-live="polite"></span></div></section>\n'
@@ -1132,7 +1198,8 @@ def main():
         sys.exit(1)
     print("- Resúmenes de las notas")
     completar_resumenes(secciones)
-    eva, santos = evangelio(hoy), santoral(hoy)
+    eva = evangelio(hoy)
+    santos, santos_imagen = santoral(hoy)
     foto_url, msg = imagen_y_mensaje_diarios(hoy)
     foto = descargar_foto(foto_url)
     try:
@@ -1149,7 +1216,7 @@ def main():
     dolar = tipo_cambio()
     print("- Dólar:", f'compra {dolar["compra"]} / venta {dolar["venta"]}' if dolar else "no disponible")
     preview_key = ahora.strftime("%Y%m%d%H%M%S")
-    destino.write_text(pagina_edicion(hoy, secciones, eva, santos, msg, clima, preview_key, dolar), encoding="utf-8")
+    destino.write_text(pagina_edicion(hoy, secciones, eva, santos, msg, clima, preview_key, dolar, santos_imagen), encoding="utf-8")
     if os.environ.get("AVISO_PATH"):
         Path(os.environ["AVISO_PATH"]).write_text(
             aviso(hoy, secciones, f"{BASE}/ediciones-{ymd}.html", clima, eva, preview_key), encoding="utf-8")
