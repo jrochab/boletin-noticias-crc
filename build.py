@@ -9,6 +9,7 @@ import re
 import sys
 import urllib.parse
 import urllib.request
+import unicodedata
 from concurrent.futures import ThreadPoolExecutor
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
@@ -50,10 +51,14 @@ SECCIONES = [
         ("Observador Deportes", "https://observador.cr/category/deportes/feed/"),
         ("La Nación Deportes", "https://www.nacion.com/arc/outboundfeeds/rss/category/puro-deporte/?outputType=xml"),
     ]},
-    {"id": "cultura", "titulo": "Cultura", "max": 3, "feeds": [
-        ("DW Cultura", "https://rss.dw.com/xml/rss-sp-cul"),
-        ("France 24", "https://www.france24.com/es/rss"),
+    {"id": "cultura", "titulo": "Cultura", "max": 5, "feeds": [
+        # Fuentes costarricenses: Google Noticias consulta sus apartados culturales.
+        ("Delfino.cr · Cultura Colectiva", "https://news.google.com/rss/search?q=site%3Adelfino.cr%2Fcultura-colectiva&hl=es-419&gl=CR&ceid=CR%3Aes-419"),
+        ("El Sol Noticias · Cultura y Ciencia", "https://news.google.com/rss/search?q=site%3Aelsolnoticias.com%2Fcategoria%2F6%2Fcultura-y-ciencia&hl=es-419&gl=CR&ceid=CR%3Aes-419"),
+        ("Semanario Universidad · Cultura", "https://news.google.com/rss/search?q=site%3Asemanariouniversidad.com%2Fcultura&hl=es-419&gl=CR&ceid=CR%3Aes-419"),
+        # Se mantienen las dos fuentes internacionales que sí son de cultura.
         ("La Nación Viva", "https://www.nacion.com/arc/outboundfeeds/rss/category/viva/?outputType=xml"),
+        ("DW Cultura", "https://rss.dw.com/xml/rss-sp-cul"),
     ]},
     {"id": "tecnologia", "titulo": "Tecnología", "max": 4, "feeds": [
         ("Xataka", "https://feeds.weblogssl.com/xataka2"),
@@ -168,6 +173,40 @@ def duplicado(titulo, vistos):
     return False
 
 
+# Filtros editoriales para evitar titulares de otra temática o claramente en otro idioma.
+PALABRAS_ES = set("el la los las un una unos unas de del al y o u en por para con sin sobre entre que como cuando donde quien quienes cual cuales se su sus es son fue han ha hay mas menos no si pero tras ante desde hasta durante este esta estos estas".split())
+MARCADORES_OTROS_IDIOMAS = set("the and for with from this that have has was were will says said after before dans pour avec les des une est sont sur aux cette ces le la un une et der die das und mit von fur ist sind nach vor ein eine".split())
+TEMAS_CULTURA = (
+    "cultura", "cultural", "arte", "artista", "artistas", "museo", "exposicion",
+    "pintura", "pintor", "escultura", "teatro", "danza", "ballet", "musica",
+    "musical", "concierto", "cantante", "cantaut", "album", "disco", "cancion",
+    "cine", "pelicula", "filme", "festival", "literatura", "libro", "novela",
+    "poesia", "poeta", "escritor", "escritora", "biblioteca", "patrimonio",
+    "tradicion", "fotografia", "orquesta", "filarmonica", "opera", "artesania",
+    "actor", "actriz", "documental", "galeria", "compositor", "compositora",
+    "calypso", "folclor", "folklore", "danza", "bailarin", "bailarina"
+)
+
+def _normalizar_texto(txt):
+    txt = unicodedata.normalize("NFD", (txt or "").lower())
+    txt = "".join(c for c in txt if unicodedata.category(c) != "Mn")
+    return re.sub(r"\s+", " ", txt)
+
+def _es_probablemente_espanol(item):
+    titulo = _normalizar_texto(item.get("titulo", ""))
+    resumen = _normalizar_texto(item.get("resumen", ""))
+    palabras_titulo = re.findall(r"\b[a-z]{2,}\b", titulo)
+    palabras_resumen = re.findall(r"\b[a-z]{2,}\b", resumen)
+    esp = sum(w in PALABRAS_ES for w in palabras_titulo) * 2
+    otro = sum(w in MARCADORES_OTROS_IDIOMAS for w in palabras_titulo) * 2
+    esp += sum(w in PALABRAS_ES for w in palabras_resumen)
+    otro += sum(w in MARCADORES_OTROS_IDIOMAS for w in palabras_resumen)
+    return not (otro >= 2 and otro > esp * 1.5)
+
+def _es_cultura(item):
+    texto = _normalizar_texto(item.get("titulo", "") + " " + item.get("resumen", ""))
+    return any(re.search(r"(?<!\w)" + re.escape(t) + r"(?!\w)", texto) for t in TEMAS_CULTURA)
+
 def reunir(sec, ahora, vistos):
     listas = []
     for fuente, url in sec["feeds"]:
@@ -179,8 +218,13 @@ def reunir(sec, ahora, vistos):
         epoca = datetime.min.replace(tzinfo=timezone.utc)
         items.sort(key=lambda x: x["fecha"] or epoca, reverse=True)
         recientes = [i for i in items if i["fecha"] and i["fecha"] >= ahora - timedelta(hours=40)]
-        listas.append(recientes or items[:2])
-        print(f"  {fuente}: {len(items)} notas ({len(recientes)} recientes)")
+        if sec["id"] == "cultura":
+            validos = [i for i in recientes if _es_probablemente_espanol(i) and _es_cultura(i)]
+        else:
+            validos = recientes
+        # No se rellenan secciones con noticias antiguas si no hay publicaciones recientes.
+        listas.append(validos)
+        print(f"  {fuente}: {len(items)} notas ({len(recientes)} recientes, {len(validos)} válidas)")
     elegidos = []
     while len(elegidos) < sec["max"] and any(listas):
         for lista in listas:
